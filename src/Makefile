@@ -1,0 +1,35 @@
+CC=clang++
+CPPFLAGS=-O0 -g -Wall -Wextra -Werror -pedantic -Wno-missing-braces -Wno-nested-anon-types -Wno-unused-function -Wno-unused-parameter -Wno-c++11-compat-deprecated-writable-strings `/usr/local/opt/llvm/bin/llvm-config --cxxflags` -I/usr/local/opt/llvm/include
+LDFLAGS=`/usr/local/opt/llvm/bin/llvm-config --ldflags`
+LDLIBS=`/usr/local/opt/llvm/bin/llvm-config --libs core --system-libs`
+SOURCES=compiler.cpp lex.cpp parser.cpp codegen.cpp ast.cpp helpers.cpp memoryarena.cpp environment.cpp
+OBJECTS=$(SOURCES:.cpp=.o)
+
+# TODO: Actually think through dependencies properly.
+# I've hit a few cases where weird bugs occur because I wrote the Makefile poorly.
+
+phosphor: $(OBJECTS)
+	$(CC) $(LDFLAGS) -o phosphor $(OBJECTS) $(LDLIBS) 
+
+compiler.o: compiler.cpp parser.h lex.cpp lex.h hashmap.hpp helpers.h memoryarena.h
+	$(CC) $(CPPFLAGS) -c compiler.cpp
+
+codegen.o: codegen.cpp codegen.h environment.h hashmap.hpp ast.h helpers.h
+
+parser.o: parser.cpp parser.h environment.h hashmap.hpp ast.h helpers.h memoryarena.h
+	$(CC) $(CPPFLAGS) -c parser.cpp
+
+lex.o: lex.cpp lex.h hashmap.hpp helpers.h memoryarena.h
+	$(CC) $(CPPFLAGS) -c lex.cpp
+
+helpers.o: helpers.cpp helpers.h
+	$(CC) $(CPPFLAGS) -c helpers.cpp
+
+ast.o: ast.cpp ast.h helpers.h
+	$(CC) $(CPPFLAGS) -c ast.cpp
+
+memoryarena.o: memoryarena.cpp memoryarena.h helpers.h
+	$(CC) $(CPPFLAGS) -c memoryarena.cpp
+
+clean:
+	$(RM) $(OBJECTS)
