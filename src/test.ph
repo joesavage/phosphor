@@ -5,20 +5,20 @@
 */
 fn puts(int ch) -> float;
 
-int a;
-a = 5;
-{
+fn main() -> void {
 	int a;
-	a = 2;
-	a + 12 * 2;
-	int b;
-	b = 3;
-	b * 0;
-	// print(5, 3);
+	a = 5;
+	{
+		int a;
+		a = 2;
+		return a + 12 * 2;
+
+		// print(5);
+
+		int b;
+		b = 30;
+		return b / 10;
+	}
+
+	return a;
 }
-a + 3;
-3E+10;
-0x10;
-100;
-13.055;
-"abc";

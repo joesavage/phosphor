@@ -15,6 +15,9 @@ using namespace llvm;
 
 // TODO: This needs proper error and type handling just EVERYWHERE right now.
 
+// TODO: Move this somewhere nicer?
+static void codegen_statement(CodeGenerator *generator, ASTNode *node);
+
 // TODO: Move this into the CodeGenerator struct. Or something.
 static IRBuilder<> builder(getGlobalContext());
 
@@ -63,9 +66,13 @@ static Value *codegen_expression(CodeGenerator *generator, ASTNode *node) {
 
 			if (!strcmp(node->string.value, "+")) {
 				result = builder.CreateAdd(left, right, "addtmp");
-				builder.CreateRet(result); // TODO: Remove this debug line
 			} else if (!strcmp(node->string.value, "*")) {
 				result = builder.CreateMul(left, right, "multmp");
+			} else if (!strcmp(node->string.value, "/")) {
+				// TODO: Handle unsigned
+				result = builder.CreateSDiv(left, right, "divtmp");
+			} else if (!strcmp(node->string.value, "-")) {
+				result = builder.CreateSub(left, right, "subtmp");
 			}
 			break;
 		}
@@ -94,7 +101,6 @@ static Value *codegen_expression(CodeGenerator *generator, ASTNode *node) {
 		{
 			// TODO: Error handling, type handling, etc. etc. etc.
 			Value *val = search_for_symbol(*generator->env, node->string.value)->value.value;
-			builder.CreateRet(val); // TODO: Remove this debug line
 			return val;
 		}
 		default:
@@ -103,6 +109,69 @@ static Value *codegen_expression(CodeGenerator *generator, ASTNode *node) {
 	}
 
 	return result;
+}
+
+static Function *codegen_function(CodeGenerator *generator, ASTNode *node) {
+	switch (node->type) {
+		case NODE_FUNCTION_SIGNATURE:
+		{
+			Environment *previous_env = generator->env;
+			generator->env = node->function_signature.env;
+
+			ASTNode **current = &node->function_signature.args;
+			std::vector<Type *> args;
+			do {
+				if (!(*current)->skeleton.left)
+					break;
+				codegen_statement(generator, *current);
+				ASTNode *declaration = (*current)->skeleton.left;
+				Type *type = search_for_type(*generator->env, declaration->variable_declaration.type->string.value)->value;
+				args.push_back(type);
+			} while((*current = (*current)->skeleton.right));
+
+			// TODO: Needle to handle redefinitions
+			char *function_name = node->function_signature.name->string.value;
+			FunctionType *function_type = FunctionType::get(search_for_type(*generator->env, node->function_signature.type->string.value)->value, args, false);
+			Function *function = Function::Create(function_type, Function::ExternalLinkage, function_name, generator->module);
+
+			// If the name we got back isn't the one we assigned, there was a conflict
+			if (function->getName() != function_name) {
+				// Erase the just-created signature, and get the previous one.
+				function->eraseFromParent();
+				function = generator->module->getFunction(function_name);
+
+				if (!function->empty()) {
+					codegen_error(generator, "redefinition of function is not allowed");
+					return NULL;
+				}
+
+				// TODO: What if the arguments of the two differ (in size or types)?
+			}
+
+			generator->env = previous_env;
+			return function;
+		}
+		case NODE_FUNCTION:
+		{
+			Function *function = codegen_function(generator, node->function.signature);
+			BasicBlock *BB = BasicBlock::Create(getGlobalContext(), "entry", function);
+			builder.SetInsertPoint(BB);
+
+			Environment *prev_env = generator->env; // TODO: Helper for env push/pop
+			generator->env = node->function.signature->function_signature.env;
+
+			codegen_statement(generator, node->function.body);
+
+			generator->env = prev_env;
+
+			return function;
+		}
+		default:
+			codegen_error(generator, "unexpected token for function code generation");
+			break;
+	}
+
+	return NULL;
 }
 
 static void codegen_statement(CodeGenerator *generator, ASTNode *node) {
@@ -127,7 +196,8 @@ static void codegen_statement(CodeGenerator *generator, ASTNode *node) {
 			break;
 		}
 		case NODE_EXPRESSION_LIST:
-			codegen_statement(generator, node->skeleton.left);
+			if (node->skeleton.left)
+				codegen_statement(generator, node->skeleton.left);
 			if (node->skeleton.right)
 				codegen_statement(generator, node->skeleton.right);
 			break;
@@ -141,27 +211,15 @@ static void codegen_statement(CodeGenerator *generator, ASTNode *node) {
 			codegen_expression(generator, node);
 			break;
 		case NODE_FUNCTION_SIGNATURE:
+		case NODE_FUNCTION:
+			codegen_function(generator, node);
+			break;
+		case NODE_RETURN:
 		{
-			// Environment *previous_env = generator->env;
-			// generator->env = node->function_signature.env;
-
-			ASTNode **current = &node->function_signature.args;
-			std::vector<Type *> args;
-			do {
-				codegen_statement(generator, *current);
-				ASTNode *declaration = (*current)->skeleton.left;
-				Type *type = search_for_type(*generator->env, declaration->variable_declaration.type->string.value)->value;
-				args.push_back(type);
-			} while((*current = (*current)->skeleton.right));
-
-			FunctionType *function_type = FunctionType::get(search_for_type(*generator->env, node->function_signature.type->string.value)->value, args, false);
-			Function *function = Function::Create(function_type, Function::ExternalLinkage, node->function_signature.name->string.value, generator->module);
-			function->dump();
-
-			// generator->env = previous_env;
+			Value *val = codegen_expression(generator, node->unary_operator.operand);
+			builder.CreateRet(val);
 			break;
 		}
-		case NODE_FUNCTION:
 		case NODE_FUNCTION_CALL:
 		case NODE_IF:
 		case NODE_DO_LOOP:
@@ -170,7 +228,6 @@ static void codegen_statement(CodeGenerator *generator, ASTNode *node) {
 		case NODE_FOR_LOOP:
 		case NODE_BREAK:
 		case NODE_CONTINUE:
-		case NODE_RETURN:
 			codegen_error(generator, "feature not yet implemented!");
 			break;
 		case NODE_CONSTANT_INT:
@@ -185,12 +242,6 @@ static void codegen_statement(CodeGenerator *generator, ASTNode *node) {
 
 void codegen(CodeGenerator *generator) {
 	generator->module = new Module("program", getGlobalContext());
-
-	// TODO: Remove
-	FunctionType *func_type = FunctionType::get(Type::getVoidTy(getGlobalContext()), false);
-	Function *func = Function::Create(func_type, Function::ExternalLinkage, "main", generator->module);
-	BasicBlock *BB = BasicBlock::Create(getGlobalContext(), "entry", func);
-	builder.SetInsertPoint(BB);
 
 	codegen_statement(generator, generator->root);
 	verifyModule(*generator->module);

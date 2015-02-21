@@ -84,6 +84,10 @@ static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 				printf_ast(node->function_call.name, "NAME", depth + 1);
 				printf_ast(node->function_call.args, "ARGS", depth + 1);
 				break;
+			case NODE_RETURN:
+				printf("RETURN\n");
+				printf_ast(node->unary_operator.operand, "EXPR", depth + 1);
+				break;
 			case NODE_IF:
 			case NODE_DO_LOOP:
 			case NODE_WHILE_LOOP:
@@ -91,7 +95,6 @@ static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 			case NODE_FOR_LOOP:
 			case NODE_BREAK:
 			case NODE_CONTINUE:
-			case NODE_RETURN:
 			default:
 				printf("%d\n", node->type);
 				break;
@@ -154,7 +157,8 @@ int main() {
 	parser.env->symbol_table.reserve(128);
 	parser.env->type_table.reserve(64);
 
-	// TODO: More types. Also, we're not using the 'size' property right now.
+	// TODO: More types (inc. unsigned types)
+	parser.env->type_table.set("void", Type::getVoidTy(getGlobalContext()));
 	parser.env->type_table.set("int", Type::getInt32Ty(getGlobalContext()));
 	parser.env->type_table.set("float", Type::getDoubleTy(getGlobalContext()));
 

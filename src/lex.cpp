@@ -37,8 +37,8 @@ static bool peek_whitespace(Lexer *lexer) {
 }
 
 static bool peek_comment(Lexer *lexer) {
-	return (lexer->cursor[0] == '/' && lexer->cursor[0] == '/')
-	    || (lexer->cursor[0] == '/' && lexer->cursor[0] == '*');
+	return (lexer->cursor[0] == '/' && lexer->cursor[1] == '/')
+	    || (lexer->cursor[0] == '/' && lexer->cursor[1] == '*');
 }
 
 static bool peek_reserved_punctuation(Lexer *lexer) {

@@ -315,46 +315,11 @@ static ASTNode *parse_variable_declaration_list(Parser *parser) {
 	return result;
 }
 
-static ASTNode *parse_function(Parser *parser) {
-	// TODO: Parse function DEFINITIONS as well as signatures.
-
-	scan_token(parser, TOKEN_KEYWORD, "fn"); // TODO: 'assert'?
-	ASTNode *result = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
-	*result = ASTNode();
-	result->type = NODE_FUNCTION_SIGNATURE;
-
-	ASTNode *identifier = parse_identifier(parser);
-	if (!identifier) {
-		parser_error(parser, "expected identifier for function signature");
-		return NULL;
-	}
-	result->function_signature.name = identifier;
-
-	// TODO: Create the function 'environment'.
-	if (!scan_token(parser, TOKEN_RESERVED_PUNCTUATION, "(")) {
-		parser_error(parser, "expected opening bracket for function signature");
-		return NULL;
-	}
-	result->function_signature.args = parse_variable_declaration_list(parser);
-	if (!scan_token(parser, TOKEN_RESERVED_PUNCTUATION, ")")) {
-		parser_error(parser, "expected closing bracket in function signature");
-		return NULL;
-	}
-
-	if (!scan_token(parser, TOKEN_OPERATOR, "->")
-	 || !(result->function_signature.type = parse_type(parser)))
-	{
-		parser_error(parser, "expected type in function signature");
-		return NULL;
-	}
-
-	scan_token(parser, TOKEN_RESERVED_PUNCTUATION, ";");
-	
-	return result;
-}
-
 static ASTNode *parse_block(Parser *parser) {
-	scan_token(parser, TOKEN_RESERVED_PUNCTUATION, "{");
+	if (!scan_token(parser, TOKEN_RESERVED_PUNCTUATION, "{")) {
+		parser_error(parser, "expected opening brace for block");
+		return NULL;
+	}
 	ASTNode *result = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
 	*result = ASTNode();
 	result->type = NODE_BLOCK;
@@ -377,6 +342,80 @@ static ASTNode *parse_block(Parser *parser) {
 	return result;
 }
 
+static ASTNode *parse_function(Parser *parser) {
+	if (!scan_token(parser, TOKEN_KEYWORD, "fn")) {
+		parser_error(parser, "expected 'fn' for function signature");
+		return NULL;
+	}
+
+	ASTNode *signature = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
+	*signature = ASTNode();
+	signature->type = NODE_FUNCTION_SIGNATURE;
+
+	ASTNode *identifier = parse_identifier(parser);
+	if (!identifier) {
+		parser_error(parser, "expected identifier for function signature");
+		return NULL;
+	}
+	signature->function_signature.name = identifier;
+
+	// TODO: Make this a helper method or I'll keep forgetting to add the parent env!
+	signature->function_signature.env = (Environment *)parser->memory->reserve(sizeof(Environment));
+	*signature->function_signature.env = Environment();
+	signature->function_signature.env->parent = parser->env;
+
+	Environment *prev_env = parser->env;
+	parser->env = signature->function_signature.env;
+
+	if (!scan_token(parser, TOKEN_RESERVED_PUNCTUATION, "(")) {
+		parser_error(parser, "expected opening bracket for function signature");
+		return NULL;
+	}
+	signature->function_signature.args = parse_variable_declaration_list(parser);
+	parser->error = NULL; // TODO: This seems a bit hacky?
+	if (!scan_token(parser, TOKEN_RESERVED_PUNCTUATION, ")")) {
+		parser_error(parser, "expected closing bracket in function signature");
+		return NULL;
+	}
+
+	if (!scan_token(parser, TOKEN_OPERATOR, "->")
+	 || !(signature->function_signature.type = parse_type(parser)))
+	{
+		parser_error(parser, "expected type in function signature");
+		return NULL;
+	}
+
+	if (scan_token(parser, TOKEN_RESERVED_PUNCTUATION, ";")) {
+		parser->env = prev_env;
+		return signature;
+	} else {
+		ASTNode *function = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
+		*function = ASTNode();
+		function->type = NODE_FUNCTION;
+		function->function.signature = signature;
+		function->function.body = parse_block(parser);
+		parser->env = prev_env;
+		return function;
+	}
+	
+	parser_error(parser, "expected termination following function signature");
+	return NULL;
+}
+
+static ASTNode *parse_return(Parser *parser) {
+	if (!scan_token(parser, TOKEN_KEYWORD, "return")) {
+		parser_error(parser, "expected 'return' for function signature");
+		return NULL;
+	}
+
+	ASTNode *result = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
+	*result = ASTNode();
+	result->type = NODE_RETURN;
+	result->unary_operator.operand = parse_expression(parser);
+	
+	return result;
+}
+
 // Predictive recursive descent parsing of a single statement
 static ASTNode *parse_statement(Parser *parser) {
 	// TODO: Try to parse a statement (by checking identifier token values etc.)
@@ -385,6 +424,8 @@ static ASTNode *parse_statement(Parser *parser) {
 		return parse_variable_declaration(parser);
 	} else if (peek_token(parser, TOKEN_KEYWORD, "fn")) {
 		return parse_function(parser);
+	} else if (peek_token(parser, TOKEN_KEYWORD, "return")) {
+		return parse_return(parser);
 	} else if (peek_token(parser, TOKEN_RESERVED_PUNCTUATION, "{")) {
 		return parse_block(parser);
 	}
