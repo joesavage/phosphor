@@ -14,6 +14,10 @@
 using namespace llvm;
 
 // TODO: This needs proper error and type handling just EVERYWHERE right now.
+//       (the way errors bubble through the system needs better handling also)
+
+// TODO: At some point, we need to focus on quality of the LLVM IR generated.
+//       [COMPARE TO: $ clang -S -emit-llvm foo.c]
 
 // TODO: Move this somewhere nicer?
 static void codegen_statement(CodeGenerator *generator, ASTNode *node);
@@ -40,9 +44,13 @@ static Value *codegen_expression(CodeGenerator *generator, ASTNode *node) {
 		case NODE_BINARY_OPERATOR:
 		{
 			if (!strcmp(node->string.value, "=")) {
-				// TODO: Variables shouldn't really be handled like this, like, at all
-				// but mutability is hard (phi nodes in pure SSA) - need to alloc mem.
+				// TODO: Assignments should truncate to the appropriate type, or cause a type error.
+				// [For integers, can just construct an APInt with a lower 'numBits'?]
+
 				Value *val = codegen_expression(generator, node->binary_operator.right);
+
+				// TODO: This side-effect means that all assignment expressions end up being immediately executed.
+				// This is obviously less than ideal, and so we need to implement mutable state by allocating memory.
 				search_for_symbol(*generator->env, node->binary_operator.left->string.value)->value.value = val;
 				break;
 			}
@@ -58,8 +66,8 @@ static Value *codegen_expression(CodeGenerator *generator, ASTNode *node) {
 				break;
 			}
 
-			if (left->getType() != IntegerType::get(getGlobalContext(), 64)) {
-				// Right now, we only have hardcoded support for (64-bit) integers.
+			if (left->getType() != IntegerType::get(getGlobalContext(), 32)) {
+				// Right now, we only have hardcoded support for (32-bit) integers.
 				codegen_error(generator, "unsupported type for binary operation");
 				break;
 			}
@@ -76,9 +84,34 @@ static Value *codegen_expression(CodeGenerator *generator, ASTNode *node) {
 			}
 			break;
 		}
+		case NODE_FUNCTION_CALL:
+		{
+			char *function_name = node->function_call.name->string.value;
+			Function *function = generator->module->getFunction(function_name);
+			if (!function) {
+				codegen_error(generator, "unknown function referenced '%s'", function_name);
+				break;
+			}
+
+			// TODO: This code was closely copy/pasted. Factor it out or something?
+			// TODO: Is this an indication that args should be stored in a dynamically sized array? (contiguous 'MemoryArena' alternative)
+			//       [Generally, ASTNodes should be less tree-like and more of a custom structure depending on the node type]
+			ASTNode **current = &node->function_call.args;
+			std::vector<Value *> args;
+			do {
+				if (!(*current)->skeleton.left)
+					break;
+				args.push_back(codegen_expression(generator, (*current)->skeleton.left));
+			} while((*current = (*current)->skeleton.right));
+
+			// TODO: Check arguments match the signature! (no. and type)
+
+			result = builder.CreateCall(function, args, "calltmp");
+			break;
+		}
 		case NODE_CONSTANT_INT:
 		{
-			// TODO: Types aren't 64-bit by default for any reason right now.
+			// TODO: Types aren't 32-bit by default for any reason right now.
 			// Just an arbitrary decision that needs reviewing in future.
 			//
 			// TODO: If we want an int literal max size instead of just wrapping,
@@ -86,7 +119,7 @@ static Value *codegen_expression(CodeGenerator *generator, ASTNode *node) {
 			//
 			// TODO: Need to deal with hex, etc. (probably earlier than this stage of
 			// compilation).
-			return ConstantInt::get(getGlobalContext(), APInt(64, StringRef(node->string.value), 10));
+			return ConstantInt::get(getGlobalContext(), APInt(32, StringRef(node->string.value), 10));
 		}
 		case NODE_CONSTANT_FLOAT:
 		{
@@ -214,16 +247,72 @@ static void codegen_statement(CodeGenerator *generator, ASTNode *node) {
 		case NODE_FUNCTION:
 			codegen_function(generator, node);
 			break;
+		case NODE_FUNCTION_CALL:
+			codegen_expression(generator, node);
+			break;
+		case NODE_IF:
+		{
+			// TODO: Switch to using more proper boolean comparison?
+			Value *cond = codegen_expression(generator, node->conditional.condition);
+			cond = builder.CreateICmpNE(cond, ConstantInt::get(getGlobalContext(), APInt(32, 0)), "ifcond");
+
+			Function *function = builder.GetInsertBlock()->getParent();
+			BasicBlock *then = BasicBlock::Create(getGlobalContext(), "then", function);
+			BasicBlock *other = BasicBlock::Create(getGlobalContext(), "else", function);
+			BasicBlock *merge = BasicBlock::Create(getGlobalContext(), "ifcont", function);
+			builder.CreateCondBr(cond, then, other);
+
+			// 'Then' block
+			builder.SetInsertPoint(then);
+			codegen_statement(generator, node->conditional.then);
+			builder.CreateBr(merge);
+			then = builder.GetInsertBlock();
+
+			// 'Else' block
+			builder.SetInsertPoint(other);
+			if (node->conditional.other)
+				codegen_statement(generator, node->conditional.other);
+			builder.CreateBr(merge);
+			other = builder.GetInsertBlock();
+
+			// TODO: Is returning from inside blocks an issue? It doesn't seem to be,
+			// but also I've seen people use phi nodes for this kind of purpose.
+			// Can we rely on an optimise pass to make that happen? Hmm..
+
+			// 'Merge' block
+			builder.SetInsertPoint(merge);
+			break;
+		}
+		case NODE_WHILE_LOOP:
+		{
+			Function *function = builder.GetInsertBlock()->getParent();
+			BasicBlock *preloop = BasicBlock::Create(getGlobalContext(), "prewhile", function);
+			BasicBlock *loop = BasicBlock::Create(getGlobalContext(), "while", function);
+			BasicBlock *after = BasicBlock::Create(getGlobalContext(), "afterwhile", function);
+			builder.CreateBr(preloop);
+
+			builder.SetInsertPoint(preloop);
+			// TODO: Switch to using more proper boolean comparison?
+			Value *cond = codegen_expression(generator, node->conditional.condition);
+			cond = builder.CreateICmpNE(cond, ConstantInt::get(getGlobalContext(), APInt(32, 0)), "whilecond");
+			builder.CreateCondBr(cond, loop, after);
+
+			// TODO: Handle 'other' branch (while..else)
+
+			builder.SetInsertPoint(loop);
+			codegen_statement(generator, node->conditional.then);
+			builder.CreateBr(preloop);
+
+			builder.SetInsertPoint(after);
+			break;
+		}
 		case NODE_RETURN:
 		{
 			Value *val = codegen_expression(generator, node->unary_operator.operand);
 			builder.CreateRet(val);
 			break;
 		}
-		case NODE_FUNCTION_CALL:
-		case NODE_IF:
 		case NODE_DO_LOOP:
-		case NODE_WHILE_LOOP:
 		case NODE_UNTIL_LOOP:
 		case NODE_FOR_LOOP:
 		case NODE_BREAK:
@@ -243,8 +332,12 @@ static void codegen_statement(CodeGenerator *generator, ASTNode *node) {
 void codegen(CodeGenerator *generator) {
 	generator->module = new Module("program", getGlobalContext());
 
+	// TODO: Add module metadata here?
+
 	codegen_statement(generator, generator->root);
 	verifyModule(*generator->module);
+
+	// TODO: Insert numerous code passes here (various optimisations, etc.)
 
 	generator->module->dump();
 	delete generator->module;

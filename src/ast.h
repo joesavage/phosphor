@@ -67,11 +67,16 @@ struct ASTNode {
 			ASTNode *action;
 		} variable_declaration;
 		struct {
+			ASTNode *condition;
+			ASTNode *then;
+			ASTNode *other;
+		} conditional;
+		struct {
 			ASTNode *signature;
 			ASTNode *body;
 		} function;
 		struct {
-			ASTNode *name;
+			ASTNode *name; // TODO:/TOTHINK: Unnecessary indirection
 			ASTNode *type;
 			ASTNode *args;
 			Environment *env;

@@ -3,21 +3,24 @@
 	This is a multi-line comment -
 	it can span multiple lines.
 */
-fn puts(int ch) -> float;
+fn putchar(int32 ch) -> int32;
 
 fn main() -> void {
-	int a;
+	int32 a;
 	a = 5;
+
 	{
-		int a;
+		int32 a;
 		a = 2;
 		return a + 12 * 2;
 
-		// print(5);
+		while (a) {
+			return a;
+		}
 
-		int b;
-		b = 30;
-		return b / 10;
+		int32 b;
+		b = putchar(35); // 35: ASCII '#'
+		return b + 5;
 	}
 
 	return a;

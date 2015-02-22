@@ -159,8 +159,9 @@ int main() {
 
 	// TODO: More types (inc. unsigned types)
 	parser.env->type_table.set("void", Type::getVoidTy(getGlobalContext()));
-	parser.env->type_table.set("int", Type::getInt32Ty(getGlobalContext()));
-	parser.env->type_table.set("float", Type::getDoubleTy(getGlobalContext()));
+	parser.env->type_table.set("int32", Type::getInt32Ty(getGlobalContext()));
+	parser.env->type_table.set("float32", Type::getFloatTy(getGlobalContext()));
+	parser.env->type_table.set("float64", Type::getDoubleTy(getGlobalContext()));
 
 	// NOTE: A lot of the front-end code relies on a lot of pointers everywhere.
 	// Make sure to benchmark the performance of this at some point - the compiler

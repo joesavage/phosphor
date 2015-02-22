@@ -304,12 +304,13 @@ static ASTNode *parse_variable_declaration_list(Parser *parser) {
 	*result = ASTNode();
 	result->type = NODE_EXPRESSION_LIST;
 
-	// TODO: Set up the function environment
 	ASTNode *declaration = parse_variable_declaration(parser);
 	if (declaration) {
 		result->skeleton.left = declaration;
 		if (scan_token(parser, TOKEN_RESERVED_PUNCTUATION, ","))
 			result->skeleton.right = parse_variable_declaration_list(parser);
+	} else {
+		parser->error = NULL;
 	}
 
 	return result;
@@ -372,7 +373,6 @@ static ASTNode *parse_function(Parser *parser) {
 		return NULL;
 	}
 	signature->function_signature.args = parse_variable_declaration_list(parser);
-	parser->error = NULL; // TODO: This seems a bit hacky?
 	if (!scan_token(parser, TOKEN_RESERVED_PUNCTUATION, ")")) {
 		parser_error(parser, "expected closing bracket in function signature");
 		return NULL;
@@ -402,9 +402,49 @@ static ASTNode *parse_function(Parser *parser) {
 	return NULL;
 }
 
+static ASTNode *parse_if(Parser *parser) {
+	if (!scan_token(parser, TOKEN_KEYWORD, "if")) {
+		parser_error(parser, "expected 'if' keyword for if statement");
+		return NULL;
+	}
+
+	ASTNode *result = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
+	*result = ASTNode();
+	result->type = NODE_IF;
+	result->conditional.condition = parse_expression(parser);
+	result->conditional.then = parse_block(parser);
+
+	if (scan_token(parser, TOKEN_KEYWORD, "else")) {
+		if (peek_token(parser, TOKEN_KEYWORD, "if"))
+			result->conditional.other = parse_if(parser);
+		else
+			result->conditional.other = parse_block(parser);
+	}
+
+	return result;
+}
+
+static ASTNode *parse_while(Parser *parser) {
+	if (!scan_token(parser, TOKEN_KEYWORD, "while")) {
+		parser_error(parser, "expected 'while' keyword for while loop");
+		return NULL;
+	}
+
+	ASTNode *result = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
+	*result = ASTNode();
+	result->type = NODE_WHILE_LOOP;
+	result->conditional.condition = parse_expression(parser);
+	result->conditional.then = parse_block(parser);
+
+	if (scan_token(parser, TOKEN_KEYWORD, "else"))
+		result->conditional.other = parse_block(parser);
+
+	return result;
+}
+
 static ASTNode *parse_return(Parser *parser) {
 	if (!scan_token(parser, TOKEN_KEYWORD, "return")) {
-		parser_error(parser, "expected 'return' for function signature");
+		parser_error(parser, "expected 'return' keyword for return signature");
 		return NULL;
 	}
 
@@ -412,7 +452,7 @@ static ASTNode *parse_return(Parser *parser) {
 	*result = ASTNode();
 	result->type = NODE_RETURN;
 	result->unary_operator.operand = parse_expression(parser);
-	
+
 	return result;
 }
 
@@ -424,6 +464,10 @@ static ASTNode *parse_statement(Parser *parser) {
 		return parse_variable_declaration(parser);
 	} else if (peek_token(parser, TOKEN_KEYWORD, "fn")) {
 		return parse_function(parser);
+	} else if (peek_token(parser, TOKEN_KEYWORD, "if")) {
+		return parse_if(parser);
+	} else if (peek_token(parser, TOKEN_KEYWORD, "while")) {
+		return parse_while(parser);
 	} else if (peek_token(parser, TOKEN_KEYWORD, "return")) {
 		return parse_return(parser);
 	} else if (peek_token(parser, TOKEN_RESERVED_PUNCTUATION, "{")) {
