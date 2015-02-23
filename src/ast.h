@@ -78,7 +78,7 @@ struct ASTNode {
 		struct {
 			ASTNode *name; // TODO:/TOTHINK: Unnecessary indirection
 			ASTNode *type;
-			ASTNode *args;
+			ASTNode *args; // TODO: Change this to a MemoryList.
 			Environment *env;
 		} function_signature;
 		struct {

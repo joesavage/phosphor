@@ -26,8 +26,10 @@ char *MemoryArenaChunk::reserve(size_t length) {
 }
 
 void MemoryArenaChunk::free() {
-	::free((void *)data);
-	data = NULL;
+	if (data) {
+		::free((void *)data);
+		data = NULL;
+	}
 	cursor = 0;
 	size = 0;
 }
@@ -36,30 +38,19 @@ void MemoryArenaChunk::free() {
 MemoryArena::MemoryArena(size_t initial_init_size) {
 	chunk_init_size = initial_init_size;
 	chunk_cursor = 0;
-	chunks = NULL;
 	chunk_cursor = 0;
 }
 
 char *MemoryArena::reserve(size_t length) {
-	if (!chunks) {
-		chunk_cursor = 0;
-		chunks = (MemoryArenaChunk *)heap_alloc(sizeof(MemoryArenaChunk));
-		chunks[0] = MemoryArenaChunk();
-	}
+	if (!chunks.getPointer(chunk_cursor))
+		chunks.add(MemoryArenaChunk());
 
 	// TODO:/NOTE: Right now, 'wasted' space near the end of chunks isn't used.
 
 	char *destination;
-	if (!(destination = chunks[chunk_cursor].reserve(length))) {
-		chunk_cursor++;
-		size_t new_size = (chunk_cursor + 1) * sizeof(MemoryArenaChunk);
-		chunks = (MemoryArenaChunk *)heap_realloc(chunks, new_size);
-		chunks[chunk_cursor] = MemoryArenaChunk();
-		if (length > chunk_init_size)
-			chunks[chunk_cursor].size = length;
-		else
-			chunks[chunk_cursor].size = chunk_init_size;
-		destination = chunks[chunk_cursor].reserve(length);
+	if (!(destination = chunks.getPointer(chunk_cursor)->reserve(length))) {
+		chunk_cursor = chunks.add(MemoryArenaChunk(length > chunk_init_size ? length : chunk_init_size));
+		destination = chunks.getPointer(chunk_cursor)->reserve(length);
 	}
 
 	return destination;
@@ -81,11 +72,11 @@ char *MemoryArena::strndup(const char *data, size_t max_length) {
 }
 
 char *MemoryArena::strdup(const char *data) {
-	return strndup(data, strlen(data) + 1);
+	return strndup(data, strlen(data));
 }
 
 void MemoryArena::free() {
-	for (size_t i = 0; i <= chunk_cursor; ++i)
-		chunks[chunk_cursor].free();
-	::free(chunks);
+	for (size_t i = 0; i < chunk_cursor; ++i)
+		chunks.getPointer(chunk_cursor)->free();
+	chunks.free();
 }

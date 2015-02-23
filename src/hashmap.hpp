@@ -2,8 +2,6 @@
 #define HASH_MAP_H
 
 #include <stdlib.h>
-#include <stdio.h>
-#include <stddef.h>
 #include <string.h>
 
 #include "helpers.h"
@@ -16,21 +14,18 @@ struct HashNode {
 };
 
 // NOTE: Optimised for insertions and lookups, not for deletions.
-// NOTE: Any call to 'set' may invalidate stored pointers [could
-// change this easily in mem alloc, but right now this is the case]
 template <typename T>
 struct HashMap {
 	size_t size;
 	size_t count;
 	HashNode<T> *buckets;
 
-	HashMap();
-	void reserve(size_t size = 256);
+	HashMap(size_t initial_size = 128);
 	void destroy();
 	bool resize(size_t new_size);
 	bool set(char *key, T value);
 	bool exists(char *key);
-	HashNode<T> *get(char *key); // TODO: Change this to [] operator overload?
+	HashNode<T> *operator[](char *key);
 };
  
 // Implementation
@@ -44,16 +39,10 @@ static unsigned int hash(const char *string) {
 }
 
 template <typename T>
-HashMap<T>::HashMap() {
-	size = 0;
+HashMap<T>::HashMap(size_t initial_size) {
+	size = initial_size;
 	count = 0;
 	buckets = NULL;
-}
-
-template <typename T>
-void HashMap<T>::reserve(size_t size) {
-	this->size = size;
-	buckets = (HashNode<T> *)heap_alloc(sizeof(HashNode<T>) * size);
 }
 
 template <typename T>
@@ -92,6 +81,9 @@ bool HashMap<T>::set(char *key, T value) {
 	if (!key || !size)
 		return false;
 
+	if (!buckets)
+		buckets = (HashNode<T> *)heap_alloc(sizeof(HashNode<T>) * size);
+
 	HashNode<T> node;
 	if (strlen(key) > sizeof(node.key)) {
 		fatal_error("HashMap key length greater than %lu!\n", sizeof(node.key));
@@ -117,8 +109,8 @@ bool HashMap<T>::set(char *key, T value) {
 }
 
 template <typename T>
-HashNode<T> *HashMap<T>::get(char *key) {
-	if (!key || !size)
+HashNode<T> *HashMap<T>::operator[](char *key) {
+	if (!buckets || !key || !size)
 		return NULL;
 
 	size_t index = hash(key) % size;
@@ -132,7 +124,7 @@ HashNode<T> *HashMap<T>::get(char *key) {
 
 template <typename T>
 bool HashMap<T>::exists(char *key) {
-	if (!key || !size)
+	if (!buckets || !key || !size)
 		return false;
 
 	size_t index = hash(key) % size;
@@ -141,6 +133,7 @@ bool HashMap<T>::exists(char *key) {
 			return false;
 		index = (index + 1) % size;
 	}
+
 	return true;
 }
 

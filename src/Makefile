@@ -1,5 +1,5 @@
 CC=clang++
-CPPFLAGS=-O0 -g -Wall -Wextra -Werror -pedantic -Wno-missing-braces -Wno-nested-anon-types -Wno-unused-function -Wno-unused-parameter -Wno-c++11-compat-deprecated-writable-strings `/usr/local/opt/llvm/bin/llvm-config --cxxflags` -I/usr/local/opt/llvm/include
+CPPFLAGS= `/usr/local/opt/llvm/bin/llvm-config --cxxflags` -I/usr/local/opt/llvm/include -g -O0 -Wall -Wextra -Werror -pedantic -Wno-missing-braces -Wno-nested-anon-types -Wno-unused-function -Wno-unused-parameter -Wno-c++11-compat-deprecated-writable-strings
 LDFLAGS=`/usr/local/opt/llvm/bin/llvm-config --ldflags`
 LDLIBS=`/usr/local/opt/llvm/bin/llvm-config --libs core --system-libs`
 SOURCES=compiler.cpp lex.cpp parser.cpp codegen.cpp ast.cpp helpers.cpp memoryarena.cpp environment.cpp
@@ -28,7 +28,7 @@ helpers.o: helpers.cpp helpers.h
 ast.o: ast.cpp ast.h helpers.h
 	$(CC) $(CPPFLAGS) -c ast.cpp
 
-memoryarena.o: memoryarena.cpp memoryarena.h helpers.h
+memoryarena.o: memoryarena.cpp memoryarena.h memorylist.hpp helpers.h
 	$(CC) $(CPPFLAGS) -c memoryarena.cpp
 
 clean:

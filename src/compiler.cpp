@@ -102,6 +102,8 @@ static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 	}
 }
 
+#include "memorylist.hpp"
+
 int main() {
 	Lexer lexer = {};
 	Parser parser = {};
@@ -113,7 +115,7 @@ int main() {
 	parser.memory = &transient_memory;
 
 	HashMap<Operator> &unary_operators = parser.unary_operators;
-	unary_operators.reserve(16);
+	unary_operators.size = 16;
 	unary_operators.set("+",  Operator(Operator::UNARY, Operator::IMPLICIT_ASSOC, 1));
 	unary_operators.set("-",  Operator(Operator::UNARY, Operator::IMPLICIT_ASSOC, 1));
 	unary_operators.set("!",  Operator(Operator::UNARY, Operator::IMPLICIT_ASSOC, 2));
@@ -121,7 +123,7 @@ int main() {
 	unary_operators.set("--", Operator(Operator::UNARY, Operator::IMPLICIT_ASSOC, 2));
 
 	HashMap<Operator> &binary_operators = parser.binary_operators;
-	binary_operators.reserve(64);
+	binary_operators.size = 64;
 	binary_operators.set("*",   Operator(Operator::BINARY, Operator::LEFT_ASSOC, 10));
 	binary_operators.set("/",   Operator(Operator::BINARY, Operator::LEFT_ASSOC, 10));
 	binary_operators.set("+",   Operator(Operator::BINARY, Operator::LEFT_ASSOC,  9));
@@ -154,8 +156,8 @@ int main() {
 
 	parser.env = (Environment *)parser.memory->reserve(sizeof(Environment));
 	*parser.env = Environment();
-	parser.env->symbol_table.reserve(128);
-	parser.env->type_table.reserve(64);
+	parser.env->symbol_table.size = 128;
+	parser.env->type_table.size = 64;
 
 	// TODO: More types (inc. unsigned types)
 	parser.env->type_table.set("void", Type::getVoidTy(getGlobalContext()));

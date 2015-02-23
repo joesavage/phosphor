@@ -1,6 +1,8 @@
 #ifndef MEMORY_ARENA_H
 #define MEMORY_ARENA_H
 
+#include "memorylist.hpp"
+
 #define MEMORY_ARENA_CHUNK_DEFAULT_SIZE 256
 
 struct MemoryArenaChunk {
@@ -16,7 +18,7 @@ struct MemoryArenaChunk {
 // invalidation issues.
 struct MemoryArena {
 	size_t chunk_cursor;
-	MemoryArenaChunk *chunks;
+	MemoryList<MemoryArenaChunk> chunks;
 
 	size_t chunk_init_size;
 

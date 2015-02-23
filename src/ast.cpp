@@ -4,8 +4,8 @@
 
 ASTNode::ASTNode() {
 	// TODO: Better way to initialize all union members to 0?
-	function_signature.name = NULL;
-	function_signature.type = NULL;
-	function_signature.args = NULL;
-	function_signature.env = NULL;
+	// (I'm super worried that this will break)
+	variable_declaration.type = NULL;
+	variable_declaration.name = NULL;
+	variable_declaration.action = NULL;
 }

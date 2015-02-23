@@ -120,12 +120,12 @@ static ASTNode *parse_type(Parser *parser) {
 
 static bool peek_unary_operator(Parser *parser) {
 	return peek_token_type(parser, TOKEN_OPERATOR)
-	    && parser->unary_operators.get(parser->cursor[0].value);
+	    && parser->unary_operators[parser->cursor[0].value];
 }
 
 static bool peek_binary_operator(Parser *parser) {
 	return peek_token_type(parser, TOKEN_OPERATOR)
-	    && parser->binary_operators.get(parser->cursor[0].value);
+	    && parser->binary_operators[parser->cursor[0].value];
 }
 
 static ASTNode *parse_unary_operator(Parser *parser) {
@@ -238,7 +238,7 @@ ASTNode *parse_expression(Parser *parser, unsigned char minimum_precedence) {
 	Operator operator_properties;
 	while (peek_binary_operator(parser))
 	{
-		Operator operator_properties = parser->binary_operators.get(parser->cursor[0].value)->value;
+		Operator operator_properties = parser->binary_operators[parser->cursor[0].value]->value;
 		unsigned char precedence = operator_properties.precedence;
 		Operator::OperatorAssociativity associativity = operator_properties.associativity;
 
@@ -329,8 +329,7 @@ static ASTNode *parse_block(Parser *parser) {
 	result->block.env = (Environment *)parser->memory->reserve(sizeof(Environment));
 	*result->block.env = Environment();
 	result->block.env->parent = parser->env;
-	result->block.env->symbol_table.reserve(); // TODO: Think about these default sizes
-	result->block.env->type_table.reserve(); // TODO: Think about these default sizes
+	// TODO: Think about new env symbol and type table default sizes
 
 	Environment *prev_env = parser->env;
 	parser->env = result->block.env;
@@ -373,6 +372,13 @@ static ASTNode *parse_function(Parser *parser) {
 		return NULL;
 	}
 	signature->function_signature.args = parse_variable_declaration_list(parser);
+	// ASTNode *arg;
+	// while ((arg = parse_variable_declaration(parser))) {
+	// 	signature->function_signature.args.add((void *)arg, sizeof(ASTNode));
+	// 	if (!scan_token(parser, TOKEN_RESERVED_PUNCTUATION, ","))
+	// 		break;
+	// }
+	// parser->error = NULL;
 	if (!scan_token(parser, TOKEN_RESERVED_PUNCTUATION, ")")) {
 		parser_error(parser, "expected closing bracket in function signature");
 		return NULL;
