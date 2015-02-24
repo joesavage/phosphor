@@ -11,12 +11,12 @@ OBJECTS=$(SOURCES:.cpp=.o)
 phosphor: $(OBJECTS)
 	$(CC) $(LDFLAGS) -o phosphor $(OBJECTS) $(LDLIBS) 
 
-compiler.o: compiler.cpp parser.h lex.cpp lex.h hashmap.hpp helpers.h memoryarena.h
+compiler.o: compiler.cpp parser.h lex.cpp lex.h hashmap.hpp helpers.h memoryarena.h memorylist.hpp
 	$(CC) $(CPPFLAGS) -c compiler.cpp
 
 codegen.o: codegen.cpp codegen.h environment.h hashmap.hpp ast.h helpers.h
 
-parser.o: parser.cpp parser.h environment.h hashmap.hpp ast.h helpers.h memoryarena.h
+parser.o: parser.cpp parser.h environment.h hashmap.hpp ast.h helpers.h memoryarena.h memorylist.hpp
 	$(CC) $(CPPFLAGS) -c parser.cpp
 
 lex.o: lex.cpp lex.h hashmap.hpp helpers.h memoryarena.h

@@ -77,12 +77,14 @@ static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 				printf("FUNCTION_SIG\n");
 				printf_ast(node->function_signature.name, "NAME", depth + 1);
 				printf_ast(node->function_signature.type, "TYPE", depth + 1);
-				printf_ast(node->function_signature.args, "ARGS", depth + 1);
+				for (size_t i = 0; i < node->function_signature.args.size(); ++i)
+					printf_ast(node->function_signature.args[i], "ARGS", depth + 1);
 				break;
 			case NODE_FUNCTION_CALL:
 				printf("FUNCTION_CALL\n");
 				printf_ast(node->function_call.name, "NAME", depth + 1);
-				printf_ast(node->function_call.args, "ARGS", depth + 1);
+				for (size_t i = 0; i < node->function_call.args.size(); ++i)
+					printf_ast(node->function_call.args[i], "ARGS", depth + 1);
 				break;
 			case NODE_RETURN:
 				printf("RETURN\n");

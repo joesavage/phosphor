@@ -2,6 +2,7 @@
 #define AST_H
 
 #include "environment.h"
+#include "memorylist.hpp"
 
 #define MINIMUM_OPERATOR_PRECISION 1
 
@@ -30,7 +31,8 @@ enum ASTNodeType {
 	NODE_CONSTANT_STRING
 };
 
-// TODO: Union memory bugs can be hard to detect...
+// TOTHINK: Union memory bugs can be tough to detect. Plus, having to re-specify
+// the 'type' of an ASTNode everywhere ('node->type.whatever') is annoying.
 struct ASTNode {
 	ASTNodeType type;
 	union {
@@ -78,12 +80,12 @@ struct ASTNode {
 		struct {
 			ASTNode *name; // TODO:/TOTHINK: Unnecessary indirection
 			ASTNode *type;
-			ASTNode *args; // TODO: Change this to a MemoryList.
+			MemoryList<ASTNode *> args;
 			Environment *env;
 		} function_signature;
 		struct {
 			ASTNode *name;
-			ASTNode *args;
+			MemoryList<ASTNode *> args;
 		} function_call;
 	};
 	

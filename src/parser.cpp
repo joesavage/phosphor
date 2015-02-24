@@ -199,13 +199,21 @@ static ASTNode *parse_atom(Parser *parser) {
 	if ((term = parse_identifier(parser))) {
 		if (scan_token(parser, TOKEN_RESERVED_PUNCTUATION, "(")) {
 			// TODO: Check if this identifier is a function (via the symbol table?)
-			// TODO: Parse comma-delimited list of expressions
-			ASTNode *parameter = parse_expression_list(parser);
+
 			ASTNode *call = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
 			*call = ASTNode();
 			call->type = NODE_FUNCTION_CALL;
+
+			call->function_call.args = MemoryList<ASTNode *>(); // TODO: Hand init is a huge pain
+			ASTNode *arg;
+			while ((arg = parse_expression(parser))) {
+				call->function_call.args.add(arg);
+				if (!scan_token(parser, TOKEN_RESERVED_PUNCTUATION, ","))
+					break;
+			}
+			parser->error = NULL;
+
 			call->function_call.name = term;
-			call->function_call.args = parameter;
 			term = call;
 			if (!scan_token(parser, TOKEN_RESERVED_PUNCTUATION, ")")) {
 				parser_error(parser, "expected closing bracket after function call");
@@ -371,14 +379,16 @@ static ASTNode *parse_function(Parser *parser) {
 		parser_error(parser, "expected opening bracket for function signature");
 		return NULL;
 	}
-	signature->function_signature.args = parse_variable_declaration_list(parser);
-	// ASTNode *arg;
-	// while ((arg = parse_variable_declaration(parser))) {
-	// 	signature->function_signature.args.add((void *)arg, sizeof(ASTNode));
-	// 	if (!scan_token(parser, TOKEN_RESERVED_PUNCTUATION, ","))
-	// 		break;
-	// }
-	// parser->error = NULL;
+
+	signature->function_signature.args = MemoryList<ASTNode *>(); // TODO: Hand init is a HUGE pain. (Create functions for init of various types?)
+	ASTNode *arg;
+	while ((arg = parse_variable_declaration(parser))) {
+		signature->function_signature.args.add(arg);
+		if (!scan_token(parser, TOKEN_RESERVED_PUNCTUATION, ","))
+			break;
+	}
+	parser->error = NULL;
+
 	if (!scan_token(parser, TOKEN_RESERVED_PUNCTUATION, ")")) {
 		parser_error(parser, "expected closing bracket in function signature");
 		return NULL;

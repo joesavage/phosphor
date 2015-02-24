@@ -93,16 +93,9 @@ static Value *codegen_expression(CodeGenerator *generator, ASTNode *node) {
 				break;
 			}
 
-			// TODO: This code was closely copy/pasted. Factor it out or something?
-			// TODO: Is this an indication that args should be stored in a dynamically sized array? (contiguous 'MemoryArena' alternative)
-			//       [Generally, ASTNodes should be less tree-like and more of a custom structure depending on the node type]
-			ASTNode **current = &node->function_call.args;
 			std::vector<Value *> args;
-			do {
-				if (!(*current)->skeleton.left)
-					break;
-				args.push_back(codegen_expression(generator, (*current)->skeleton.left));
-			} while((*current = (*current)->skeleton.right));
+			for (size_t i = 0; i < node->function_call.args.size(); ++i)
+				args.push_back(codegen_expression(generator, node->function_call.args[i]));
 
 			// TODO: Check arguments match the signature! (no. and type)
 
@@ -151,16 +144,12 @@ static Function *codegen_function(CodeGenerator *generator, ASTNode *node) {
 			Environment *previous_env = generator->env;
 			generator->env = node->function_signature.env;
 
-			ASTNode **current = &node->function_signature.args;
 			std::vector<Type *> args;
-			do {
-				if (!(*current)->skeleton.left)
-					break;
-				codegen_statement(generator, *current);
-				ASTNode *declaration = (*current)->skeleton.left;
-				Type *type = search_for_type(*generator->env, declaration->variable_declaration.type->string.value)->value;
-				args.push_back(type);
-			} while((*current = (*current)->skeleton.right));
+			for (size_t i = 0; i < node->function_signature.args.size(); ++i) {
+				ASTNode *arg = node->function_signature.args[i];
+				codegen_statement(generator, arg);
+				args.push_back(search_for_type(*generator->env, arg->variable_declaration.type->string.value)->value);
+			}
 
 			// TODO: Needle to handle redefinitions
 			char *function_name = node->function_signature.name->string.value;
