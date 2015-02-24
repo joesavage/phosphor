@@ -26,6 +26,24 @@ static void parser_error(Parser *parser, const char *format, ...) {
 	parser->error = buffer;
 }
 
+static void set_environment(Parser *parser,
+                            ASTNode *node,
+                            Environment *parent)
+{
+	Environment *env = (Environment *)parser->memory->reserve(sizeof(Environment));
+	*env = Environment();
+	env->parent = parent;
+
+	switch (node->type) {
+		case NODE_FUNCTION_SIGNATURE:
+			node->function_signature.env = env;
+			break;
+		default:
+			node->block.env = env;
+			break;
+	}
+}
+
 inline static bool eof(Parser *parser) {
 	return parser->cursor >= (parser->tokens + parser->token_count);
 }
@@ -64,18 +82,15 @@ static ASTNode *parse_constant(Parser *parser) {
 	Token *token = NULL;
 	if ((token = scan_token_type(parser, TOKEN_INT))) {
 		result = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
-		*result = ASTNode();
-		result->type = NODE_CONSTANT_INT;
+		*result = ASTNode(NODE_CONSTANT_INT);
 		result->string.value = token->value;
 	} else if ((token = scan_token_type(parser, TOKEN_FLOAT))) {
 		result = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
-		*result = ASTNode();
-		result->type = NODE_CONSTANT_FLOAT;
+		*result = ASTNode(NODE_CONSTANT_FLOAT);
 		result->string.value = token->value;
 	} else if ((token = scan_token_type(parser, TOKEN_STRING))) {
 		result = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
-		*result = ASTNode();
-		result->type = NODE_CONSTANT_STRING;
+		*result = ASTNode(NODE_CONSTANT_STRING);
 		result->string.value = token->value;
 	}
 	
@@ -88,8 +103,7 @@ static ASTNode *parse_identifier(Parser *parser) {
 	Token *identifier = scan_token_type(parser, TOKEN_IDENTIFIER);
 	if (identifier) {
 		result = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
-		*result = ASTNode();
-		result->type = NODE_IDENTIFIER;
+		*result = ASTNode(NODE_IDENTIFIER);
 		result->string.value = identifier->value;
 	}
 
@@ -109,8 +123,7 @@ static ASTNode *parse_type(Parser *parser) {
 	HashNode<Type *> *type = search_for_type(*parser->env, parser->cursor->value);
 	if (type) {
 		result = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
-		*result = ASTNode();
-		result->type = NODE_TYPE;
+		*result = ASTNode(NODE_TYPE);
 		result->string.value = parser->cursor->value;
 		scan_token_type(parser, TOKEN_IDENTIFIER);
 	}
@@ -134,8 +147,7 @@ static ASTNode *parse_unary_operator(Parser *parser) {
 	if (peek_unary_operator(parser)) {
 		Token *op = scan_token_type(parser, TOKEN_OPERATOR);
 		result = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
-		*result = ASTNode();
-		result->type = NODE_UNARY_OPERATOR;
+		*result = ASTNode(NODE_UNARY_OPERATOR);
 		result->string.value = op->value;
 	}
 
@@ -148,8 +160,7 @@ static ASTNode *parse_binary_operator(Parser *parser) {
 	if (peek_binary_operator(parser)) {
 		Token *op = scan_token_type(parser, TOKEN_OPERATOR);
 		result = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
-		*result = ASTNode();
-		result->type = NODE_BINARY_OPERATOR;
+		*result = ASTNode(NODE_BINARY_OPERATOR);
 		result->string.value = op->value;
 	}
 
@@ -177,21 +188,6 @@ ASTNode *parse_unary_operators(Parser *parser) {
 	return result;
 }
 
-static ASTNode *parse_expression_list(Parser *parser) {
-	ASTNode *result = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
-	*result = ASTNode();
-	result->type = NODE_EXPRESSION_LIST;
-
-	ASTNode *expression = parse_expression(parser);
-	if (expression) {
-		result->skeleton.left = expression;
-		if(scan_token(parser, TOKEN_RESERVED_PUNCTUATION, ","))	
-			result->skeleton.right = parse_expression_list(parser);
-	}
-
-	return result;
-}
-
 static ASTNode *parse_atom(Parser *parser) {
 	ASTNode *result = parse_unary_operators(parser);
 	ASTNode *&term = result ? result->unary_operator.operand : result;
@@ -201,10 +197,8 @@ static ASTNode *parse_atom(Parser *parser) {
 			// TODO: Check if this identifier is a function (via the symbol table?)
 
 			ASTNode *call = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
-			*call = ASTNode();
-			call->type = NODE_FUNCTION_CALL;
+			*call = ASTNode(NODE_FUNCTION_CALL);
 
-			call->function_call.args = MemoryList<ASTNode *>(); // TODO: Hand init is a huge pain
 			ASTNode *arg;
 			while ((arg = parse_expression(parser))) {
 				call->function_call.args.add(arg);
@@ -285,8 +279,7 @@ ASTNode *parse_expression(Parser *parser, unsigned char minimum_precedence) {
 
 static ASTNode *parse_variable_declaration(Parser *parser) {
 	ASTNode *result = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
-	*result = ASTNode();
-	result->type = NODE_VARIABLE_DECLARATION;
+	*result = ASTNode(NODE_VARIABLE_DECLARATION);
 
 	result->variable_declaration.type = parse_type(parser);
 
@@ -307,37 +300,14 @@ static ASTNode *parse_variable_declaration(Parser *parser) {
 	return result;
 }
 
-static ASTNode *parse_variable_declaration_list(Parser *parser) {
-	ASTNode *result = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
-	*result = ASTNode();
-	result->type = NODE_EXPRESSION_LIST;
-
-	ASTNode *declaration = parse_variable_declaration(parser);
-	if (declaration) {
-		result->skeleton.left = declaration;
-		if (scan_token(parser, TOKEN_RESERVED_PUNCTUATION, ","))
-			result->skeleton.right = parse_variable_declaration_list(parser);
-	} else {
-		parser->error = NULL;
-	}
-
-	return result;
-}
-
 static ASTNode *parse_block(Parser *parser) {
 	if (!scan_token(parser, TOKEN_RESERVED_PUNCTUATION, "{")) {
 		parser_error(parser, "expected opening brace for block");
 		return NULL;
 	}
 	ASTNode *result = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
-	*result = ASTNode();
-	result->type = NODE_BLOCK;
-	
-	// TODO: We should make a helper function for 'create & init' like this.
-	result->block.env = (Environment *)parser->memory->reserve(sizeof(Environment));
-	*result->block.env = Environment();
-	result->block.env->parent = parser->env;
-	// TODO: Think about new env symbol and type table default sizes
+	*result = ASTNode(NODE_BLOCK);
+	set_environment(parser, result, parser->env);
 
 	Environment *prev_env = parser->env;
 	parser->env = result->block.env;
@@ -357,8 +327,8 @@ static ASTNode *parse_function(Parser *parser) {
 	}
 
 	ASTNode *signature = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
-	*signature = ASTNode();
-	signature->type = NODE_FUNCTION_SIGNATURE;
+	*signature = ASTNode(NODE_FUNCTION_SIGNATURE);
+	set_environment(parser, signature, parser->env);
 
 	ASTNode *identifier = parse_identifier(parser);
 	if (!identifier) {
@@ -366,11 +336,6 @@ static ASTNode *parse_function(Parser *parser) {
 		return NULL;
 	}
 	signature->function_signature.name = identifier;
-
-	// TODO: Make this a helper method or I'll keep forgetting to add the parent env!
-	signature->function_signature.env = (Environment *)parser->memory->reserve(sizeof(Environment));
-	*signature->function_signature.env = Environment();
-	signature->function_signature.env->parent = parser->env;
 
 	Environment *prev_env = parser->env;
 	parser->env = signature->function_signature.env;
@@ -380,7 +345,6 @@ static ASTNode *parse_function(Parser *parser) {
 		return NULL;
 	}
 
-	signature->function_signature.args = MemoryList<ASTNode *>(); // TODO: Hand init is a HUGE pain. (Create functions for init of various types?)
 	ASTNode *arg;
 	while ((arg = parse_variable_declaration(parser))) {
 		signature->function_signature.args.add(arg);
@@ -406,8 +370,7 @@ static ASTNode *parse_function(Parser *parser) {
 		return signature;
 	} else {
 		ASTNode *function = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
-		*function = ASTNode();
-		function->type = NODE_FUNCTION;
+		*function = ASTNode(NODE_FUNCTION);
 		function->function.signature = signature;
 		function->function.body = parse_block(parser);
 		parser->env = prev_env;
@@ -425,8 +388,7 @@ static ASTNode *parse_if(Parser *parser) {
 	}
 
 	ASTNode *result = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
-	*result = ASTNode();
-	result->type = NODE_IF;
+	*result = ASTNode(NODE_IF);
 	result->conditional.condition = parse_expression(parser);
 	result->conditional.then = parse_block(parser);
 
@@ -447,8 +409,7 @@ static ASTNode *parse_while(Parser *parser) {
 	}
 
 	ASTNode *result = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
-	*result = ASTNode();
-	result->type = NODE_WHILE_LOOP;
+	*result = ASTNode(NODE_WHILE_LOOP);
 	result->conditional.condition = parse_expression(parser);
 	result->conditional.then = parse_block(parser);
 
@@ -465,8 +426,7 @@ static ASTNode *parse_return(Parser *parser) {
 	}
 
 	ASTNode *result = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
-	*result = ASTNode();
-	result->type = NODE_RETURN;
+	*result = ASTNode(NODE_RETURN);
 	result->unary_operator.operand = parse_expression(parser);
 
 	return result;
@@ -505,8 +465,7 @@ static ASTNode *parse_statements(Parser *parser) {
 
 		if (!(*current)) {
 			*current = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
-			**current = ASTNode();
-			(*current)->type = NODE_STATEMENTS;
+			**current = ASTNode(NODE_STATEMENTS);
 
 			// PLAN: When we different environments associated with nodes we simply
 			// save the current environment, set the current environment to a new env,

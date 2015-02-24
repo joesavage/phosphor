@@ -217,12 +217,6 @@ static void codegen_statement(CodeGenerator *generator, ASTNode *node) {
 			generator->env->symbol_table.set(node->variable_declaration.name->string.value, variable);
 			break;
 		}
-		case NODE_EXPRESSION_LIST:
-			if (node->skeleton.left)
-				codegen_statement(generator, node->skeleton.left);
-			if (node->skeleton.right)
-				codegen_statement(generator, node->skeleton.right);
-			break;
 		case NODE_BLOCK:
 		{
 			codegen_statement(generator, node->block.left);

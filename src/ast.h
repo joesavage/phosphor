@@ -9,7 +9,6 @@
 enum ASTNodeType {
 	NODE_STATEMENTS,
 	NODE_VARIABLE_DECLARATION,
-	NODE_FUNCTION_CALL,
 	NODE_IF,
 	NODE_DO_LOOP,
 	NODE_WHILE_LOOP,
@@ -20,9 +19,9 @@ enum ASTNodeType {
 	NODE_BLOCK,
 	NODE_FUNCTION,
 	NODE_FUNCTION_SIGNATURE,
+	NODE_FUNCTION_CALL,
 	NODE_RETURN,
 	NODE_IDENTIFIER,
-	NODE_EXPRESSION_LIST,
 	NODE_TYPE,
 	NODE_UNARY_OPERATOR,
 	NODE_BINARY_OPERATOR,
@@ -33,6 +32,7 @@ enum ASTNodeType {
 
 // TOTHINK: Union memory bugs can be tough to detect. Plus, having to re-specify
 // the 'type' of an ASTNode everywhere ('node->type.whatever') is annoying.
+// Inheritance would be nice. I may have made a poor architecture decision.
 struct ASTNode {
 	ASTNodeType type;
 	union {
@@ -54,10 +54,6 @@ struct ASTNode {
 			ASTNode *left;
 			ASTNode *right;
 		} binary_operator;
-		struct {
-			ASTNode *left;
-			ASTNode *right;
-		} skeleton;
 		struct {
 			ASTNode *left;
 			ASTNode *right;
@@ -89,7 +85,7 @@ struct ASTNode {
 		} function_call;
 	};
 	
-	ASTNode();
+	ASTNode(ASTNodeType type);
 };
 
 #endif
