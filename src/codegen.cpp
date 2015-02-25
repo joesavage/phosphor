@@ -4,8 +4,6 @@
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/CallingConv.h"
 
-#include <vector> // TODO: Remove and replace with dynamic c-style array
-
 #include "codegen.h"
 #include "hashmap.hpp"
 #include "environment.h"
@@ -37,50 +35,76 @@ static void codegen_error(CodeGenerator *generator, const char *format, ...) {
 	generator->error = buffer;
 }
 
-static Value *codegen_expression(CodeGenerator *generator, ASTNode *node) {
-	Value *result = NULL;
+static PType lookup_type(CodeGenerator *generator, PValue value) {
+	PType *type = search_for_type(*generator->env, value.type);
+	return type ? *type : PType();
+}
+
+static PType lookup_type(CodeGenerator *generator, char *value) {
+	PType *type = search_for_type(*generator->env, value);
+	return type ? *type : PType();
+}
+
+static PFunction lookup_function(CodeGenerator *generator, char *name) {
+	PFunction *function = search_for_function(*generator->env, name);
+	return function ? *function : PFunction();
+}
+
+// NOTE: Keeping pointers to these is dangerous as if the HashMap resizes it'll
+// cause pointer invalidation.
+static PValue *lookup_symbol(CodeGenerator *generator, char *symbol) {
+	return search_for_symbol(*generator->env, symbol);
+}
+
+
+static PValue codegen_expression(CodeGenerator *generator, ASTNode *node) {
+	PValue result;
 
 	switch (node->type) {
 		case NODE_BINARY_OPERATOR:
 		{
 			if (!strcmp(node->string.value, "=")) {
-				// TODO: Assignments should truncate to the appropriate type, or cause a type error.
-				// [For integers, can just construct an APInt with a lower 'numBits'?]
+				PValue *var_sym = lookup_symbol(generator, node->binary_operator.left->string.value);
 
-				Value *val = codegen_expression(generator, node->binary_operator.right);
+				PValue value = codegen_expression(generator, node->binary_operator.right);
+
+				if (lookup_type(generator, value) != lookup_type(generator, *var_sym)) {
+					// TODO: Type conversions (factor out) - for integers, using Trunc or ZExt/SExt (getIntegerBitWidth).
+					codegen_error(generator, "type mismatch in assignment");
+					break;
+				}
 
 				// TODO: This side-effect means that all assignment expressions end up being immediately executed.
 				// This is obviously less than ideal, and so we need to implement mutable state by allocating memory.
-				search_for_symbol(*generator->env, node->binary_operator.left->string.value)->value.value = val;
+				var_sym->value = value.value;
 				break;
 			}
 
 
-			Value *left = codegen_expression(generator, node->binary_operator.left);
-			Value *right = codegen_expression(generator, node->binary_operator.right);
+			PValue left = codegen_expression(generator, node->binary_operator.left);
+			PValue right = codegen_expression(generator, node->binary_operator.right);
 
-			// TODO: Realistically, type checking for default hardcoded operations
-			// should be more complicated than this (type promotion, etc.).
-			if (left->getType() != right->getType()) {
+			if (lookup_type(generator, left) != lookup_type(generator, right)) {
 				codegen_error(generator, "type mismatch in addition operation!");
 				break;
 			}
 
-			if (left->getType() != IntegerType::get(getGlobalContext(), 32)) {
-				// Right now, we only have hardcoded support for (32-bit) integers.
+			// Right now, we only have hardcoded support for (32-bit) integers.
+			if (lookup_type(generator, left).type != IntegerType::get(getGlobalContext(), 32)) {
 				codegen_error(generator, "unsupported type for binary operation");
 				break;
 			}
 
+			result.type = left.type;
 			if (!strcmp(node->string.value, "+")) {
-				result = builder.CreateAdd(left, right, "addtmp");
+				result.value = builder.CreateAdd(left.value, right.value, "addtmp");
 			} else if (!strcmp(node->string.value, "*")) {
-				result = builder.CreateMul(left, right, "multmp");
+				result.value = builder.CreateMul(left.value, right.value, "multmp");
 			} else if (!strcmp(node->string.value, "/")) {
 				// TODO: Handle unsigned
-				result = builder.CreateSDiv(left, right, "divtmp");
+				result.value = builder.CreateSDiv(left.value, right.value, "divtmp");
 			} else if (!strcmp(node->string.value, "-")) {
-				result = builder.CreateSub(left, right, "subtmp");
+				result.value = builder.CreateSub(left.value, right.value, "subtmp");
 			}
 			break;
 		}
@@ -93,13 +117,21 @@ static Value *codegen_expression(CodeGenerator *generator, ASTNode *node) {
 				break;
 			}
 
-			std::vector<Value *> args;
-			for (size_t i = 0; i < node->function_call.args.size(); ++i)
-				args.push_back(codegen_expression(generator, node->function_call.args[i]));
+			size_t args_count = node->function_call.args.size();
+			MemoryList<Value *> args(args_count);
+			for (size_t i = 0; i < args_count; ++i)
+				args.add(codegen_expression(generator, node->function_call.args[i]).value);
 
 			// TODO: Check arguments match the signature! (no. and type)
 
-			result = builder.CreateCall(function, args, "calltmp");
+			PFunction pfunction = lookup_function(generator, function_name);
+			if (!pfunction.return_type) {
+				codegen_error(generator, "failed to find function '%s'", function_name);
+				break;
+			}
+
+			result.type = pfunction.return_type;
+			result.value = builder.CreateCall(function, ArrayRef<Value *>(args.getPointer(0), args_count), "calltmp");
 			break;
 		}
 		case NODE_CONSTANT_INT:
@@ -112,22 +144,28 @@ static Value *codegen_expression(CodeGenerator *generator, ASTNode *node) {
 			//
 			// TODO: Need to deal with hex, etc. (probably earlier than this stage of
 			// compilation).
-			return ConstantInt::get(getGlobalContext(), APInt(32, StringRef(node->string.value), 10));
+			result.type = "int32";
+			result.value = ConstantInt::get(getGlobalContext(), APInt(32, StringRef(node->string.value), 10));
+			break;
 		}
 		case NODE_CONSTANT_FLOAT:
 		{
-			// TODO: This is a really terrible way to initialize an APFloat.
+			// TODO: This seems like a pretty terrible way to initialize an APFloat.
 			// TODO: Also, we probably want to deal with oversized floats or whatever
 			// here.
+
+			result.type = "float32";
 			APFloat number(0.0);
 			number.convertFromString(node->string.value, APFloat::rmNearestTiesToEven);
-			return ConstantFP::get(getGlobalContext(), number);
+			result.value = ConstantFP::get(getGlobalContext(), number);
+			break;
 		}
 		case NODE_IDENTIFIER:
 		{
-			// TODO: Error handling, type handling, etc. etc. etc.
-			Value *val = search_for_symbol(*generator->env, node->string.value)->value.value;
-			return val;
+			PValue *value = lookup_symbol(generator, node->string.value);
+			if (!value)
+				codegen_error(generator, "failed to find symbol '%s'", node->string.value);
+			return *value;
 		}
 		default:
 			codegen_error(generator, "failed to generate expression for ASTNode");
@@ -137,24 +175,28 @@ static Value *codegen_expression(CodeGenerator *generator, ASTNode *node) {
 	return result;
 }
 
-static Function *codegen_function(CodeGenerator *generator, ASTNode *node) {
+static PFunction codegen_function(CodeGenerator *generator, ASTNode *node) {
+	PFunction result;
+
 	switch (node->type) {
 		case NODE_FUNCTION_SIGNATURE:
 		{
 			Environment *previous_env = generator->env;
 			generator->env = node->function_signature.env;
 
-			std::vector<Type *> args;
-			for (size_t i = 0; i < node->function_signature.args.size(); ++i) {
+			size_t args_count = node->function_signature.args.size();
+			MemoryList<Type *> args(args_count);
+			for (size_t i = 0; i < args_count; ++i) {
 				ASTNode *arg = node->function_signature.args[i];
 				codegen_statement(generator, arg);
-				args.push_back(search_for_type(*generator->env, arg->variable_declaration.type->string.value)->value);
+				args.add(lookup_type(generator, arg->variable_declaration.type->string.value).type);
 			}
 
 			// TODO: Needle to handle redefinitions
 			char *function_name = node->function_signature.name->string.value;
-			FunctionType *function_type = FunctionType::get(search_for_type(*generator->env, node->function_signature.type->string.value)->value, args, false);
+			FunctionType *function_type = FunctionType::get(lookup_type(generator, node->function_signature.type->string.value).type, ArrayRef<Type *>(args.getPointer(0), args_count), false);
 			Function *function = Function::Create(function_type, Function::ExternalLinkage, function_name, generator->module);
+			function->addFnAttr(Attribute::NoUnwind);
 
 			// If the name we got back isn't the one we assigned, there was a conflict
 			if (function->getName() != function_name) {
@@ -164,19 +206,30 @@ static Function *codegen_function(CodeGenerator *generator, ASTNode *node) {
 
 				if (!function->empty()) {
 					codegen_error(generator, "redefinition of function is not allowed");
-					return NULL;
+					break;
 				}
 
+				PFunction pfunction = lookup_function(generator, function_name);
+				if (!pfunction.return_type) {
+					codegen_error(generator, "conflict between LLVM and function table state");
+					break;
+				}
+				result = pfunction;
+
 				// TODO: What if the arguments of the two differ (in size or types)?
+			} else {
+				result.value = function;
+				result.return_type = node->function_signature.type->string.value;
+				previous_env->function_table.set(function_name, result);
 			}
 
 			generator->env = previous_env;
-			return function;
+			break;
 		}
 		case NODE_FUNCTION:
 		{
-			Function *function = codegen_function(generator, node->function.signature);
-			BasicBlock *BB = BasicBlock::Create(getGlobalContext(), "entry", function);
+			PFunction function = codegen_function(generator, node->function.signature);
+			BasicBlock *BB = BasicBlock::Create(getGlobalContext(), "entry", function.value);
 			builder.SetInsertPoint(BB);
 
 			Environment *prev_env = generator->env; // TODO: Helper for env push/pop
@@ -186,14 +239,15 @@ static Function *codegen_function(CodeGenerator *generator, ASTNode *node) {
 
 			generator->env = prev_env;
 
-			return function;
+			result = function;
+			break;
 		}
 		default:
 			codegen_error(generator, "unexpected token for function code generation");
 			break;
 	}
 
-	return NULL;
+	return result;
 }
 
 static void codegen_statement(CodeGenerator *generator, ASTNode *node) {
@@ -213,7 +267,7 @@ static void codegen_statement(CodeGenerator *generator, ASTNode *node) {
 		}
 		case NODE_VARIABLE_DECLARATION:
 		{
-			Symbol variable = { node->variable_declaration.type->string.value, false, NULL };
+			PValue variable(node->variable_declaration.type->string.value, NULL);
 			generator->env->symbol_table.set(node->variable_declaration.name->string.value, variable);
 			break;
 		}
@@ -235,15 +289,15 @@ static void codegen_statement(CodeGenerator *generator, ASTNode *node) {
 			break;
 		case NODE_IF:
 		{
-			// TODO: Switch to using more proper boolean comparison?
-			Value *cond = codegen_expression(generator, node->conditional.condition);
-			cond = builder.CreateICmpNE(cond, ConstantInt::get(getGlobalContext(), APInt(32, 0)), "ifcond");
+			// TODO: Switch to using more proper boolean comparison (type i1)
+			PValue cond = codegen_expression(generator, node->conditional.condition);
+			cond.value = builder.CreateICmpNE(cond.value, ConstantInt::get(getGlobalContext(), APInt(32, 0)), "ifcond");
 
 			Function *function = builder.GetInsertBlock()->getParent();
 			BasicBlock *then = BasicBlock::Create(getGlobalContext(), "then", function);
 			BasicBlock *other = BasicBlock::Create(getGlobalContext(), "else", function);
 			BasicBlock *merge = BasicBlock::Create(getGlobalContext(), "ifcont", function);
-			builder.CreateCondBr(cond, then, other);
+			builder.CreateCondBr(cond.value, then, other);
 
 			// 'Then' block
 			builder.SetInsertPoint(then);
@@ -276,9 +330,9 @@ static void codegen_statement(CodeGenerator *generator, ASTNode *node) {
 
 			builder.SetInsertPoint(preloop);
 			// TODO: Switch to using more proper boolean comparison?
-			Value *cond = codegen_expression(generator, node->conditional.condition);
-			cond = builder.CreateICmpNE(cond, ConstantInt::get(getGlobalContext(), APInt(32, 0)), "whilecond");
-			builder.CreateCondBr(cond, loop, after);
+			PValue cond = codegen_expression(generator, node->conditional.condition);
+			cond.value = builder.CreateICmpNE(cond.value, ConstantInt::get(getGlobalContext(), APInt(32, 0)), "whilecond");
+			builder.CreateCondBr(cond.value, loop, after);
 
 			// TODO: Handle 'other' branch (while..else)
 
@@ -291,8 +345,9 @@ static void codegen_statement(CodeGenerator *generator, ASTNode *node) {
 		}
 		case NODE_RETURN:
 		{
-			Value *val = codegen_expression(generator, node->unary_operator.operand);
-			builder.CreateRet(val);
+			PValue val = codegen_expression(generator, node->unary_operator.operand);
+			// TODO: Type check
+			builder.CreateRet(val.value);
 			break;
 		}
 		case NODE_DO_LOOP:

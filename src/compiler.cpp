@@ -47,11 +47,6 @@ static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 				printf_ast(node->variable_declaration.name, "NAME", depth + 1);
 				printf_ast(node->variable_declaration.action, "ACTION", depth + 1);
 				break;
-			case NODE_EXPRESSION_LIST:
-				printf("SKELETON\n");
-				printf_ast(node->skeleton.left, "LEFT", depth + 1);
-				printf_ast(node->skeleton.right, "RIGHT", depth + 1);
-				break;
 			case NODE_UNARY_OPERATOR:
 				printf("UNARY_OP<%s>\n", node->unary_operator.value);
 				printf_ast(node->unary_operator.operand, "OPERAND", depth + 1);
@@ -160,12 +155,20 @@ int main() {
 	*parser.env = Environment();
 	parser.env->symbol_table.size = 128;
 	parser.env->type_table.size = 64;
+	parser.env->function_table.size = 32;
 
-	// TODO: More types (inc. unsigned types)
-	parser.env->type_table.set("void", Type::getVoidTy(getGlobalContext()));
-	parser.env->type_table.set("int32", Type::getInt32Ty(getGlobalContext()));
-	parser.env->type_table.set("float32", Type::getFloatTy(getGlobalContext()));
-	parser.env->type_table.set("float64", Type::getDoubleTy(getGlobalContext()));
+	parser.env->type_table.set("void", PType(Type::getVoidTy(getGlobalContext())));
+	parser.env->type_table.set("bool", PType(Type::getInt1Ty(getGlobalContext())));
+	parser.env->type_table.set("int8", PType(Type::getInt8Ty(getGlobalContext()), true));
+	parser.env->type_table.set("int16", PType(Type::getInt16Ty(getGlobalContext()), true));
+	parser.env->type_table.set("int32", PType(Type::getInt32Ty(getGlobalContext()), true));
+	parser.env->type_table.set("int64", PType(Type::getInt64Ty(getGlobalContext()), true));
+	parser.env->type_table.set("uint8", PType(Type::getInt8Ty(getGlobalContext()), false));
+	parser.env->type_table.set("uint16", PType(Type::getInt16Ty(getGlobalContext()), false));
+	parser.env->type_table.set("uint32", PType(Type::getInt32Ty(getGlobalContext()), false));
+	parser.env->type_table.set("uint64", PType(Type::getInt64Ty(getGlobalContext()), false));
+	parser.env->type_table.set("float32", PType(Type::getFloatTy(getGlobalContext())));
+	parser.env->type_table.set("float64", PType(Type::getDoubleTy(getGlobalContext())));
 
 	// NOTE: A lot of the front-end code relies on a lot of pointers everywhere.
 	// Make sure to benchmark the performance of this at some point - the compiler

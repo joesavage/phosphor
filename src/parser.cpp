@@ -120,8 +120,8 @@ static ASTNode *parse_type(Parser *parser) {
 	if (!peek_token_type(parser, TOKEN_IDENTIFIER))
 		return NULL;
 
-	HashNode<Type *> *type = search_for_type(*parser->env, parser->cursor->value);
-	if (type) {
+	PType *ptype = search_for_type(*parser->env, parser->cursor->value);
+	if (ptype) {
 		result = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
 		*result = ASTNode(NODE_TYPE);
 		result->string.value = parser->cursor->value;
@@ -194,8 +194,6 @@ static ASTNode *parse_atom(Parser *parser) {
 
 	if ((term = parse_identifier(parser))) {
 		if (scan_token(parser, TOKEN_RESERVED_PUNCTUATION, "(")) {
-			// TODO: Check if this identifier is a function (via the symbol table?)
-
 			ASTNode *call = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
 			*call = ASTNode(NODE_FUNCTION_CALL);
 
