@@ -36,10 +36,10 @@ static void set_environment(Parser *parser,
 
 	switch (node->type) {
 		case NODE_FUNCTION_SIGNATURE:
-			node->function_signature.env = env;
+			node->data.function_signature.env = env;
 			break;
 		default:
-			node->block.env = env;
+			node->data.block.env = env;
 			break;
 	}
 }
@@ -82,26 +82,26 @@ static ASTNode *parse_constant(Parser *parser) {
 	Token *token = NULL;
 	if ((token = scan_token_type(parser, TOKEN_INT))) {
 		result = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
-		*result = ASTNode(NODE_CONSTANT_INT);
-		result->string.value = token->value;
+		initialise_node(result, NODE_CONSTANT_INT);
+		result->data.string.value = token->value;
 	} else if ((token = scan_token_type(parser, TOKEN_FLOAT))) {
 		result = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
-		*result = ASTNode(NODE_CONSTANT_FLOAT);
-		result->string.value = token->value;
+		initialise_node(result, NODE_CONSTANT_FLOAT);
+		result->data.string.value = token->value;
 	} else if ((token = scan_token_type(parser, TOKEN_STRING))) {
 		result = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
-		*result = ASTNode(NODE_CONSTANT_STRING);
-		result->string.value = token->value;
+		initialise_node(result, NODE_CONSTANT_STRING);
+		result->data.string.value = token->value;
 	} else if (peek_token(parser, TOKEN_KEYWORD, "true")) {
 		++parser->cursor;
 		result = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
-		*result = ASTNode(NODE_CONSTANT_BOOL);
-		result->integer.value = 1;
+		initialise_node(result, NODE_CONSTANT_BOOL);
+		result->data.integer.value = 1;
 	} else if (peek_token(parser, TOKEN_KEYWORD, "false")) {
 		++parser->cursor;
 		result = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
-		*result = ASTNode(NODE_CONSTANT_BOOL);
-		result->integer.value = 0;
+		initialise_node(result, NODE_CONSTANT_BOOL);
+		result->data.integer.value = 0;
 	}
 	
 	return result;
@@ -113,8 +113,8 @@ static ASTNode *parse_identifier(Parser *parser) {
 	Token *identifier = scan_token_type(parser, TOKEN_IDENTIFIER);
 	if (identifier) {
 		result = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
-		*result = ASTNode(NODE_IDENTIFIER);
-		result->string.value = identifier->value;
+		initialise_node(result, NODE_IDENTIFIER);
+		result->data.string.value = identifier->value;
 	}
 
 	return result;
@@ -133,8 +133,8 @@ static ASTNode *parse_type(Parser *parser) {
 	PType *ptype = search_for_type(*parser->env, parser->cursor->value);
 	if (ptype) {
 		result = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
-		*result = ASTNode(NODE_TYPE);
-		result->string.value = parser->cursor->value;
+		initialise_node(result, NODE_TYPE);
+		result->data.string.value = parser->cursor->value;
 		scan_token_type(parser, TOKEN_IDENTIFIER);
 	}
 
@@ -157,8 +157,8 @@ static ASTNode *parse_unary_operator(Parser *parser) {
 	if (peek_unary_operator(parser)) {
 		Token *op = scan_token_type(parser, TOKEN_OPERATOR);
 		result = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
-		*result = ASTNode(NODE_UNARY_OPERATOR);
-		result->string.value = op->value;
+		initialise_node(result, NODE_UNARY_OPERATOR);
+		result->data.string.value = op->value;
 	}
 
 	return result;
@@ -170,8 +170,8 @@ static ASTNode *parse_binary_operator(Parser *parser) {
 	if (peek_binary_operator(parser)) {
 		Token *op = scan_token_type(parser, TOKEN_OPERATOR);
 		result = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
-		*result = ASTNode(NODE_BINARY_OPERATOR);
-		result->string.value = op->value;
+		initialise_node(result, NODE_BINARY_OPERATOR);
+		result->data.string.value = op->value;
 	}
 
 	return result;
@@ -190,7 +190,7 @@ ASTNode *parse_unary_operators(Parser *parser) {
 		if (!result) {
 			result = op;
 		} else {
-			last_op->unary_operator.operand = op;
+			last_op->data.unary_operator.operand = op;
 			last_op = op;
 		}
 	}
@@ -200,22 +200,22 @@ ASTNode *parse_unary_operators(Parser *parser) {
 
 static ASTNode *parse_atom(Parser *parser) {
 	ASTNode *result = parse_unary_operators(parser);
-	ASTNode *&term = result ? result->unary_operator.operand : result;
+	ASTNode *&term = result ? result->data.unary_operator.operand : result;
 
 	if ((term = parse_identifier(parser))) {
 		if (scan_token(parser, TOKEN_RESERVED_PUNCTUATION, "(")) {
 			ASTNode *call = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
-			*call = ASTNode(NODE_FUNCTION_CALL);
+			initialise_node(call, NODE_FUNCTION_CALL);
 
 			ASTNode *arg;
 			while ((arg = parse_expression(parser))) {
-				call->function_call.args.add(arg);
+				call->data.function_call.args.add(arg);
 				if (!scan_token(parser, TOKEN_RESERVED_PUNCTUATION, ","))
 					break;
 			}
 			parser->error = NULL;
 
-			call->function_call.name = term;
+			call->data.function_call.name = term;
 			term = call;
 			if (!scan_token(parser, TOKEN_RESERVED_PUNCTUATION, ")")) {
 				parser_error(parser, "expected closing bracket after function call");
@@ -276,8 +276,8 @@ ASTNode *parse_expression(Parser *parser, unsigned char minimum_precedence) {
 			return NULL;
 		}
 
-		op->binary_operator.left = result;
-		op->binary_operator.right = right;
+		op->data.binary_operator.left = result;
+		op->data.binary_operator.right = right;
 		result = op;
 	}
 
@@ -286,23 +286,23 @@ ASTNode *parse_expression(Parser *parser, unsigned char minimum_precedence) {
 
 static ASTNode *parse_variable_declaration(Parser *parser) {
 	ASTNode *result = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
-	*result = ASTNode(NODE_VARIABLE_DECLARATION);
+	initialise_node(result, NODE_VARIABLE_DECLARATION);
 
-	result->variable_declaration.type = parse_type(parser);
+	result->data.variable_declaration.type = parse_type(parser);
 
 	// TODO: Handle modifiers.
 
 	if (peek_token_type(parser, TOKEN_KEYWORD)) {
 		parser_error(parser, "cannot declare variable with reserved keyword name");
 		return NULL;
-	} else if (!(result->variable_declaration.name = parse_identifier(parser))) {
+	} else if (!(result->data.variable_declaration.name = parse_identifier(parser))) {
 		// TODO: Better error handling for if a reserved keyword follows?
 		parser_error(parser, "expected identifier for variable declaration");
 		return NULL;
 	}
 
 	// TODO: Handle assignment immediately after variable declaration (int a = 5).
-	// 'result->variable_declaration.action' ASTNode
+	// 'result->data.variable_declaration.action' ASTNode
 
 	return result;
 }
@@ -313,12 +313,12 @@ static ASTNode *parse_block(Parser *parser) {
 		return NULL;
 	}
 	ASTNode *result = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
-	*result = ASTNode(NODE_BLOCK);
+	initialise_node(result, NODE_BLOCK);
 	set_environment(parser, result, parser->env);
 
 	Environment *prev_env = parser->env;
-	parser->env = result->block.env;
-	result->block.left = parse_statements(parser);
+	parser->env = result->data.block.env;
+	result->data.block.left = parse_statements(parser);
 	if (!scan_token(parser, TOKEN_RESERVED_PUNCTUATION, "}")) {
 		parser_error(parser, "expected closing brace after block");
 		return NULL;
@@ -334,7 +334,7 @@ static ASTNode *parse_function(Parser *parser) {
 	}
 
 	ASTNode *signature = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
-	*signature = ASTNode(NODE_FUNCTION_SIGNATURE);
+	initialise_node(signature, NODE_FUNCTION_SIGNATURE);
 	set_environment(parser, signature, parser->env);
 
 	ASTNode *identifier = parse_identifier(parser);
@@ -342,10 +342,10 @@ static ASTNode *parse_function(Parser *parser) {
 		parser_error(parser, "expected identifier for function signature");
 		return NULL;
 	}
-	signature->function_signature.name = identifier;
+	signature->data.function_signature.name = identifier;
 
 	Environment *prev_env = parser->env;
-	parser->env = signature->function_signature.env;
+	parser->env = signature->data.function_signature.env;
 
 	if (!scan_token(parser, TOKEN_RESERVED_PUNCTUATION, "(")) {
 		parser_error(parser, "expected opening bracket for function signature");
@@ -354,7 +354,7 @@ static ASTNode *parse_function(Parser *parser) {
 
 	ASTNode *arg;
 	while ((arg = parse_variable_declaration(parser))) {
-		signature->function_signature.args.add(arg);
+		signature->data.function_signature.args.add(arg);
 		if (!scan_token(parser, TOKEN_RESERVED_PUNCTUATION, ","))
 			break;
 	}
@@ -366,7 +366,7 @@ static ASTNode *parse_function(Parser *parser) {
 	}
 
 	if (!scan_token(parser, TOKEN_OPERATOR, "->")
-	 || !(signature->function_signature.type = parse_type(parser)))
+	 || !(signature->data.function_signature.type = parse_type(parser)))
 	{
 		parser_error(parser, "expected type in function signature");
 		return NULL;
@@ -377,9 +377,9 @@ static ASTNode *parse_function(Parser *parser) {
 		return signature;
 	} else {
 		ASTNode *function = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
-		*function = ASTNode(NODE_FUNCTION);
-		function->function.signature = signature;
-		function->function.body = parse_block(parser);
+		initialise_node(function, NODE_FUNCTION);
+		function->data.function.signature = signature;
+		function->data.function.body = parse_block(parser);
 		parser->env = prev_env;
 		return function;
 	}
@@ -395,15 +395,15 @@ static ASTNode *parse_if(Parser *parser) {
 	}
 
 	ASTNode *result = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
-	*result = ASTNode(NODE_IF);
-	result->conditional.condition = parse_expression(parser);
-	result->conditional.then = parse_block(parser);
+	initialise_node(result, NODE_IF);
+	result->data.conditional.condition = parse_expression(parser);
+	result->data.conditional.then = parse_block(parser);
 
 	if (scan_token(parser, TOKEN_KEYWORD, "else")) {
 		if (peek_token(parser, TOKEN_KEYWORD, "if"))
-			result->conditional.other = parse_if(parser);
+			result->data.conditional.other = parse_if(parser);
 		else
-			result->conditional.other = parse_block(parser);
+			result->data.conditional.other = parse_block(parser);
 	}
 
 	return result;
@@ -416,12 +416,12 @@ static ASTNode *parse_while(Parser *parser) {
 	}
 
 	ASTNode *result = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
-	*result = ASTNode(NODE_WHILE_LOOP);
-	result->conditional.condition = parse_expression(parser);
-	result->conditional.then = parse_block(parser);
+	initialise_node(result, NODE_WHILE_LOOP);
+	result->data.conditional.condition = parse_expression(parser);
+	result->data.conditional.then = parse_block(parser);
 
 	if (scan_token(parser, TOKEN_KEYWORD, "else"))
-		result->conditional.other = parse_block(parser);
+		result->data.conditional.other = parse_block(parser);
 
 	return result;
 }
@@ -433,8 +433,8 @@ static ASTNode *parse_return(Parser *parser) {
 	}
 
 	ASTNode *result = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
-	*result = ASTNode(NODE_RETURN);
-	result->unary_operator.operand = parse_expression(parser);
+	initialise_node(result, NODE_RETURN);
+	result->data.unary_operator.operand = parse_expression(parser);
 
 	return result;
 }
@@ -472,16 +472,16 @@ static ASTNode *parse_statements(Parser *parser) {
 
 		if (!(*current)) {
 			*current = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
-			**current = ASTNode(NODE_STATEMENTS);
+			initialise_node(*current, NODE_STATEMENTS);
 
 			// PLAN: When we different environments associated with nodes we simply
 			// save the current environment, set the current environment to a new env,
 			// parse statements under this new env, and then restore the old env.
-			(*current)->block.env = parser->env;
+			(*current)->data.block.env = parser->env;
 		}
-		(*current)->block.left = statement;
-		(*current)->block.right = NULL;
-		current = &(*current)->block.right;
+		(*current)->data.block.left = statement;
+		(*current)->data.block.right = NULL;
+		current = &(*current)->data.block.right;
 
 		
 		scan_token(parser, TOKEN_RESERVED_PUNCTUATION, ";");

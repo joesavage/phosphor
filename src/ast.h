@@ -31,62 +31,64 @@ enum ASTNodeType {
 	NODE_CONSTANT_STRING
 };
 
+#define DECL_ASTNODE_DATA(node, utype, name) struct ASTNode::data::utype &name = node->data.utype;
+
 // TOTHINK: Union memory bugs can be tough to detect. Plus, having to re-specify
 // the 'type' of an ASTNode everywhere ('node->type.whatever') is annoying.
 // Inheritance would be nice. I may have made a poor architecture decision.
 struct ASTNode {
 	ASTNodeType type;
-	union {
-		struct {
+	union data {
+		struct real {
 			double value;
 		} real; // NOTE: Currently unused
-		struct {
+		struct integer {
 			size_t value;
 		} integer;
-		struct {
+		struct string {
 			char *value;
 		} string;
-		struct {
+		struct unary_operator {
 			char *value;
 			ASTNode *operand;
 		} unary_operator;
-		struct {
+		struct binary_operator {
 			char *value;
 			ASTNode *left;
 			ASTNode *right;
 		} binary_operator;
-		struct {
+		struct block {
 			ASTNode *left;
 			ASTNode *right;
 			Environment *env;
 		} block;
-		struct {
+		struct variable_declaration {
 			ASTNode *type;
 			ASTNode *name;
 			ASTNode *action;
 		} variable_declaration;
-		struct {
+		struct conditional {
 			ASTNode *condition;
 			ASTNode *then;
 			ASTNode *other;
 		} conditional;
-		struct {
+		struct function {
 			ASTNode *signature;
 			ASTNode *body;
 		} function;
-		struct {
+		struct function_signature {
 			ASTNode *name; // TODO:/TOTHINK: Unnecessary indirection
 			ASTNode *type;
 			MemoryList<ASTNode *> args;
 			Environment *env;
 		} function_signature;
-		struct {
+		struct function_call {
 			ASTNode *name;
 			MemoryList<ASTNode *> args;
 		} function_call;
-	};
-	
-	ASTNode(ASTNodeType type);
+	} data;
 };
+
+void initialise_node(ASTNode *node, ASTNodeType type);
 
 #endif

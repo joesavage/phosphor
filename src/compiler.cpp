@@ -37,57 +37,84 @@ static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 		switch (node->type) {
 			case NODE_STATEMENTS:
 			case NODE_BLOCK:
+			{
+				DECL_ASTNODE_DATA(node, block, pdata)
 				printf("BLOCK\n");
-				printf_ast(node->block.left, "LEFT", depth + 1);
-				printf_ast(node->block.right, "RIGHT", depth + 1);
+				printf_ast(pdata.left, "LEFT", depth + 1);
+				printf_ast(pdata.right, "RIGHT", depth + 1);
 				break;
+			}
 			case NODE_VARIABLE_DECLARATION:
+			{
+				DECL_ASTNODE_DATA(node, variable_declaration, pdata)
 				printf("VARDECL\n");
-				printf_ast(node->variable_declaration.type, "TYPE", depth + 1);
-				printf_ast(node->variable_declaration.name, "NAME", depth + 1);
-				printf_ast(node->variable_declaration.action, "ACTION", depth + 1);
+				printf_ast(pdata.type, "TYPE", depth + 1);
+				printf_ast(pdata.name, "NAME", depth + 1);
+				printf_ast(pdata.action, "ACTION", depth + 1);
 				break;
+			}
 			case NODE_UNARY_OPERATOR:
-				printf("UNARY_OP<%s>\n", node->unary_operator.value);
-				printf_ast(node->unary_operator.operand, "OPERAND", depth + 1);
+			{
+				DECL_ASTNODE_DATA(node, unary_operator, pdata)
+				printf("UNARY_OP<%s>\n", pdata.value);
+				printf_ast(pdata.operand, "OPERAND", depth + 1);
 				break;
+			}
 			case NODE_BINARY_OPERATOR:
-				printf("UNARY_OP<%s>\n", node->binary_operator.value);
-				printf_ast(node->binary_operator.left, "LEFT", depth + 1);
-				printf_ast(node->binary_operator.right, "RIGHT", depth + 1);
+			{
+				DECL_ASTNODE_DATA(node, binary_operator, pdata)
+				printf("BINARY_OP<%s>\n", pdata.value);
+				printf_ast(pdata.left, "LEFT", depth + 1);
+				printf_ast(pdata.right, "RIGHT", depth + 1);
 				break;
-            case NODE_CONSTANT_BOOL:
-                printf("INT<%zu>\n", node->integer.value);
-                break;
+			}
+			case NODE_CONSTANT_BOOL:
+			{
+				printf("INT<%zu>\n", node->data.integer.value);
+				break;
+			}
 			case NODE_TYPE:
 			case NODE_IDENTIFIER:
 			case NODE_CONSTANT_INT:
 			case NODE_CONSTANT_FLOAT:
 			case NODE_CONSTANT_STRING:
-				printf("STRING<%s>\n", node->string.value);
+			{
+				printf("STRING<%s>\n", node->data.string.value);
 				break;
+			}
 			case NODE_FUNCTION:
+			{
+				DECL_ASTNODE_DATA(node, function, pdata)
 				printf("FUNCTION\n");
-				printf_ast(node->function.signature, "SIG", depth + 1);
-				printf_ast(node->function.body, "BODY", depth + 1);
+				printf_ast(pdata.signature, "SIG", depth + 1);
+				printf_ast(pdata.body, "BODY", depth + 1);
 				break;
+			}
 			case NODE_FUNCTION_SIGNATURE:
+			{
+				DECL_ASTNODE_DATA(node, function_signature, pdata)
 				printf("FUNCTION_SIG\n");
-				printf_ast(node->function_signature.name, "NAME", depth + 1);
-				printf_ast(node->function_signature.type, "TYPE", depth + 1);
-				for (size_t i = 0; i < node->function_signature.args.size(); ++i)
-					printf_ast(node->function_signature.args[i], "ARGS", depth + 1);
+				printf_ast(pdata.name, "NAME", depth + 1);
+				printf_ast(pdata.type, "TYPE", depth + 1);
+				for (size_t i = 0; i < pdata.args.size(); ++i)
+					printf_ast(pdata.args[i], "ARGS", depth + 1);
 				break;
+			}
 			case NODE_FUNCTION_CALL:
+			{
+				DECL_ASTNODE_DATA(node, function_call, pdata)
 				printf("FUNCTION_CALL\n");
-				printf_ast(node->function_call.name, "NAME", depth + 1);
-				for (size_t i = 0; i < node->function_call.args.size(); ++i)
-					printf_ast(node->function_call.args[i], "ARGS", depth + 1);
+				printf_ast(pdata.name, "NAME", depth + 1);
+				for (size_t i = 0; i < pdata.args.size(); ++i)
+					printf_ast(pdata.args[i], "ARGS", depth + 1);
 				break;
+			}
 			case NODE_RETURN:
+			{
 				printf("RETURN\n");
-				printf_ast(node->unary_operator.operand, "EXPR", depth + 1);
+				printf_ast(node->data.unary_operator.operand, "EXPR", depth + 1);
 				break;
+			}
 			case NODE_IF:
 			case NODE_DO_LOOP:
 			case NODE_WHILE_LOOP:
@@ -96,8 +123,10 @@ static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 			case NODE_BREAK:
 			case NODE_CONTINUE:
 			default:
+			{
 				printf("%d\n", node->type);
 				break;
+			}
 		}
 	}
 }

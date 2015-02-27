@@ -12,9 +12,9 @@ fn main() -> void {
 
 	{
 		bool b;
-		b = true;
+		b = (a == 2);
 
-		while (a != 2) {
+		while (b) {
 			return a;
 		}
 

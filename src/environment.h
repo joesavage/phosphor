@@ -6,6 +6,7 @@
 #include "llvm/IR/Function.h"
 
 #include "hashmap.hpp"
+#include "memorylist.hpp"
 
 using namespace llvm;
 

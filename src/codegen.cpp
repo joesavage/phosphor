@@ -63,10 +63,12 @@ static PValue codegen_expression(CodeGenerator *generator, ASTNode *node) {
 	switch (node->type) {
 		case NODE_BINARY_OPERATOR:
 		{
-			if (!strcmp(node->string.value, "=")) {
-				PValue *var_sym = lookup_symbol(generator, node->binary_operator.left->string.value);
+			DECL_ASTNODE_DATA(node, binary_operator, pnode)
 
-				PValue value = codegen_expression(generator, node->binary_operator.right);
+			if (!strcmp(pnode.value, "=")) {
+				DECL_ASTNODE_DATA(pnode.left, string, symbol_name)
+				PValue *var_sym = lookup_symbol(generator, symbol_name.value);
+				PValue value = codegen_expression(generator, pnode.right);
 
 				if (lookup_type(generator, value) != lookup_type(generator, *var_sym)) {
 					// TODO: Type conversions (factor out) - for integers, using Trunc or ZExt/SExt (getIntegerBitWidth).
@@ -81,8 +83,8 @@ static PValue codegen_expression(CodeGenerator *generator, ASTNode *node) {
 			}
 
 
-			PValue left = codegen_expression(generator, node->binary_operator.left);
-			PValue right = codegen_expression(generator, node->binary_operator.right);
+			PValue left = codegen_expression(generator, pnode.left);
+			PValue right = codegen_expression(generator, pnode.right);
 
 			if (lookup_type(generator, left) != lookup_type(generator, right)) {
 				codegen_error(generator, "type mismatch in addition operation!");
@@ -96,37 +98,38 @@ static PValue codegen_expression(CodeGenerator *generator, ASTNode *node) {
 			}
 
 			result.type = left.type;
-			if (!strcmp(node->string.value, "==")) {
+			if (!strcmp(pnode.value, "==")) {
 				result.type = "bool";
 				result.value = builder.CreateICmpEQ(left.value, right.value, "eqtmp");
-			} else if (!strcmp(node->string.value, "!=")) {
+			} else if (!strcmp(pnode.value, "!=")) {
 				result.type = "bool";
 				result.value = builder.CreateICmpNE(left.value, right.value, "eqtmp");
-			} else if (!strcmp(node->string.value, "+")) {
+			} else if (!strcmp(pnode.value, "+")) {
 				result.value = builder.CreateAdd(left.value, right.value, "addtmp");
-			} else if (!strcmp(node->string.value, "*")) {
+			} else if (!strcmp(pnode.value, "*")) {
 				result.value = builder.CreateMul(left.value, right.value, "multmp");
-			} else if (!strcmp(node->string.value, "/")) {
+			} else if (!strcmp(pnode.value, "/")) {
 				// TODO: Handle unsigned
 				result.value = builder.CreateSDiv(left.value, right.value, "divtmp");
-			} else if (!strcmp(node->string.value, "-")) {
+			} else if (!strcmp(pnode.value, "-")) {
 				result.value = builder.CreateSub(left.value, right.value, "subtmp");
 			}
 			break;
 		}
 		case NODE_FUNCTION_CALL:
 		{
-			char *function_name = node->function_call.name->string.value;
+			DECL_ASTNODE_DATA(node, function_call, pnode)
+			char *function_name = pnode.name->data.string.value;
 			Function *function = generator->module->getFunction(function_name);
 			if (!function) {
 				codegen_error(generator, "unknown function referenced '%s'", function_name);
 				break;
 			}
 
-			size_t args_count = node->function_call.args.size();
+			size_t args_count = pnode.args.size();
 			MemoryList<Value *> args(args_count);
 			for (size_t i = 0; i < args_count; ++i)
-				args.add(codegen_expression(generator, node->function_call.args[i]).value);
+				args.add(codegen_expression(generator, pnode.args[i]).value);
 
 			// TODO: Check arguments match the signature! (no. and type)
 
@@ -150,16 +153,18 @@ static PValue codegen_expression(CodeGenerator *generator, ASTNode *node) {
 			//
 			// TODO: Need to deal with hex, etc. (probably earlier than this stage of
 			// compilation).
+			DECL_ASTNODE_DATA(node, string, pnode)
 			result.type = "int32";
-			result.value = ConstantInt::get(getGlobalContext(), APInt(32, StringRef(node->string.value), 10));
+			result.value = ConstantInt::get(getGlobalContext(), APInt(32, StringRef(pnode.value), 10));
 			break;
 		}
 		case NODE_CONSTANT_BOOL:
 		{
+			DECL_ASTNODE_DATA(node, integer, pnode)
 			result.type = "bool";
 			// TODO: Use the type table information to construct (e.g. numbits) rather
 			// than duplicating it.
-			result.value = ConstantInt::get(getGlobalContext(), APInt(1, node->integer.value));
+			result.value = ConstantInt::get(getGlobalContext(), APInt(1, pnode.value));
 			break;
 		}
 		case NODE_CONSTANT_FLOAT:
@@ -167,18 +172,19 @@ static PValue codegen_expression(CodeGenerator *generator, ASTNode *node) {
 			// TODO: This seems like a pretty terrible way to initialize an APFloat.
 			// TODO: Also, we probably want to deal with oversized floats or whatever
 			// here.
-
+			DECL_ASTNODE_DATA(node, string, pnode)
 			result.type = "float32";
 			APFloat number(0.0);
-			number.convertFromString(node->string.value, APFloat::rmNearestTiesToEven);
+			number.convertFromString(pnode.value, APFloat::rmNearestTiesToEven);
 			result.value = ConstantFP::get(getGlobalContext(), number);
 			break;
 		}
 		case NODE_IDENTIFIER:
 		{
-			PValue *value = lookup_symbol(generator, node->string.value);
+			DECL_ASTNODE_DATA(node, string, pnode)
+			PValue *value = lookup_symbol(generator, pnode.value);
 			if (!value)
-				codegen_error(generator, "failed to find symbol '%s'", node->string.value);
+				codegen_error(generator, "failed to find symbol '%s'", pnode.value);
 			return *value;
 		}
 		default:
@@ -195,20 +201,23 @@ static PFunction codegen_function(CodeGenerator *generator, ASTNode *node) {
 	switch (node->type) {
 		case NODE_FUNCTION_SIGNATURE:
 		{
+			DECL_ASTNODE_DATA(node, function_signature, pnode)
 			Environment *previous_env = generator->env;
-			generator->env = node->function_signature.env;
+			generator->env = pnode.env;
 
-			size_t args_count = node->function_signature.args.size();
+			size_t args_count = pnode.args.size();
 			MemoryList<Type *> args(args_count);
 			for (size_t i = 0; i < args_count; ++i) {
-				ASTNode *arg = node->function_signature.args[i];
-				codegen_statement(generator, arg);
-				args.add(lookup_type(generator, arg->variable_declaration.type->string.value).type);
+				DECL_ASTNODE_DATA(pnode.args[i], variable_declaration, arg)
+				codegen_statement(generator, pnode.args[i]);
+				PType type = lookup_type(generator, arg.type->data.string.value);
+				args.add(type.type);
 			}
 
 			// TODO: Needle to handle redefinitions
-			char *function_name = node->function_signature.name->string.value;
-			FunctionType *function_type = FunctionType::get(lookup_type(generator, node->function_signature.type->string.value).type, ArrayRef<Type *>(args.getPointer(0), args_count), false);
+			char *function_name = pnode.name->data.string.value;
+			char *function_type_name = pnode.type->data.string.value;
+			FunctionType *function_type = FunctionType::get(lookup_type(generator, function_type_name).type, ArrayRef<Type *>(args.getPointer(0), args_count), false);
 			Function *function = Function::Create(function_type, Function::ExternalLinkage, function_name, generator->module);
 			function->addFnAttr(Attribute::NoUnwind);
 
@@ -228,12 +237,12 @@ static PFunction codegen_function(CodeGenerator *generator, ASTNode *node) {
 					codegen_error(generator, "conflict between LLVM and function table state");
 					break;
 				}
-				result = pfunction;
 
-				// TODO: What if the arguments of the two differ (in size or types)?
+				// TODO: Function argument check
+				result = pfunction;
 			} else {
 				result.value = function;
-				result.return_type = node->function_signature.type->string.value;
+				result.return_type = pnode.type->data.string.value;
 				previous_env->function_table.set(function_name, result);
 			}
 
@@ -242,14 +251,15 @@ static PFunction codegen_function(CodeGenerator *generator, ASTNode *node) {
 		}
 		case NODE_FUNCTION:
 		{
-			PFunction function = codegen_function(generator, node->function.signature);
+			DECL_ASTNODE_DATA(node, function, pnode)
+			PFunction function = codegen_function(generator, pnode.signature);
 			BasicBlock *BB = BasicBlock::Create(getGlobalContext(), "entry", function.value);
 			builder.SetInsertPoint(BB);
 
 			Environment *prev_env = generator->env; // TODO: Helper for env push/pop
-			generator->env = node->function.signature->function_signature.env;
+			generator->env = pnode.signature->data.function_signature.env;
 
-			codegen_statement(generator, node->function.body);
+			codegen_statement(generator, pnode.body);
 
 			generator->env = prev_env;
 
@@ -269,25 +279,27 @@ static void codegen_statement(CodeGenerator *generator, ASTNode *node) {
 		case NODE_STATEMENTS:
 		{
 			Environment *previous_env = generator->env;
-			generator->env = node->block.env;
+			generator->env = node->data.block.env;
 			do {
-				if (node->block.left)
-					codegen_statement(generator, node->block.left);
+				if (node->data.block.left)
+					codegen_statement(generator, node->data.block.left);
 				if (generator->error)
 					return;
-			} while ((node = node->block.right));
+			} while ((node = node->data.block.right));
 			generator->env = previous_env;
 			break;
 		}
 		case NODE_VARIABLE_DECLARATION:
 		{
-			PValue variable(node->variable_declaration.type->string.value, NULL);
-			generator->env->symbol_table.set(node->variable_declaration.name->string.value, variable);
+			DECL_ASTNODE_DATA(node, variable_declaration, pnode)
+			PValue variable(pnode.type->data.string.value, NULL);
+			generator->env->symbol_table.set(pnode.name->data.string.value, variable);
 			break;
 		}
 		case NODE_BLOCK:
 		{
-			codegen_statement(generator, node->block.left);
+			DECL_ASTNODE_DATA(node, block, pnode)
+			codegen_statement(generator, pnode.left);
 			break;
 		}
 		case NODE_UNARY_OPERATOR:
@@ -303,7 +315,8 @@ static void codegen_statement(CodeGenerator *generator, ASTNode *node) {
 			break;
 		case NODE_IF:
 		{
-			PValue cond = codegen_expression(generator, node->conditional.condition);
+			DECL_ASTNODE_DATA(node, conditional, pnode)
+			PValue cond = codegen_expression(generator, pnode.condition);
 
 			if (lookup_type(generator, cond) != lookup_type(generator, "bool")) {
 				codegen_error(generator, "unsupported type for if statement condition");
@@ -320,14 +333,14 @@ static void codegen_statement(CodeGenerator *generator, ASTNode *node) {
 
 			// 'Then' block
 			builder.SetInsertPoint(then);
-			codegen_statement(generator, node->conditional.then);
+			codegen_statement(generator, pnode.then);
 			builder.CreateBr(merge);
 			then = builder.GetInsertBlock();
 
 			// 'Else' block
 			builder.SetInsertPoint(other);
-			if (node->conditional.other)
-				codegen_statement(generator, node->conditional.other);
+			if (pnode.other)
+				codegen_statement(generator, pnode.other);
 			builder.CreateBr(merge);
 			other = builder.GetInsertBlock();
 
@@ -341,6 +354,7 @@ static void codegen_statement(CodeGenerator *generator, ASTNode *node) {
 		}
 		case NODE_WHILE_LOOP:
 		{
+			DECL_ASTNODE_DATA(node, conditional, pnode)
 			Function *function = builder.GetInsertBlock()->getParent();
 			BasicBlock *preloop = BasicBlock::Create(getGlobalContext(), "prewhile", function);
 			BasicBlock *loop = BasicBlock::Create(getGlobalContext(), "while", function);
@@ -349,7 +363,7 @@ static void codegen_statement(CodeGenerator *generator, ASTNode *node) {
 
 			builder.SetInsertPoint(preloop);
 
-			PValue cond = codegen_expression(generator, node->conditional.condition);
+			PValue cond = codegen_expression(generator, pnode.condition);
 
 			if (lookup_type(generator, cond) != lookup_type(generator, "bool")) {
 				codegen_error(generator, "unsupported type for while statement condition");
@@ -362,7 +376,7 @@ static void codegen_statement(CodeGenerator *generator, ASTNode *node) {
 			// TODO: Handle 'other' branch (while..else)
 
 			builder.SetInsertPoint(loop);
-			codegen_statement(generator, node->conditional.then);
+			codegen_statement(generator, pnode.then);
 			builder.CreateBr(preloop);
 
 			builder.SetInsertPoint(after);
@@ -370,7 +384,8 @@ static void codegen_statement(CodeGenerator *generator, ASTNode *node) {
 		}
 		case NODE_RETURN:
 		{
-			PValue val = codegen_expression(generator, node->unary_operator.operand);
+			DECL_ASTNODE_DATA(node, unary_operator, pnode)
+			PValue val = codegen_expression(generator, pnode.operand);
 			// TODO: Type check
 			builder.CreateRet(val.value);
 			break;
