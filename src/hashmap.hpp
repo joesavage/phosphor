@@ -85,8 +85,8 @@ bool HashMap<T>::set(char *key, T value) {
 		buckets = (HashNode<T> *)heap_alloc(sizeof(HashNode<T>) * size);
 
 	HashNode<T> node;
-	if (strlen(key) > sizeof(node.key)) {
-		fatal_error("HashMap key length greater than %lu!\n", sizeof(node.key));
+	if (strlen(key) >= sizeof(node.key)) {
+		fatal_error("HashMap key length greater/eq than %lu!\n", sizeof(node.key));
 		return false;
 	}
 
@@ -94,7 +94,7 @@ bool HashMap<T>::set(char *key, T value) {
 	if (count * 2 > size)
 		resize(size * 2);
 
-	memcpy(node.key, key, sizeof(node.key));
+	memcpy(node.key, key, strlen(key) + 1);
 	node.value = value;
 	size_t index = hash(key) % size;
 	while (buckets[index].key[0] != '\0') {

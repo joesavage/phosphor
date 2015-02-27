@@ -213,7 +213,7 @@ static ASTNode *parse_atom(Parser *parser) {
 				if (!scan_token(parser, TOKEN_RESERVED_PUNCTUATION, ","))
 					break;
 			}
-			parser->error = NULL;
+			parser->error = NULL; // TODO: We actually don't want to ignore all errors here. Only some errors. Hmm..
 
 			call->data.function_call.name = term;
 			term = call;
@@ -233,6 +233,9 @@ static ASTNode *parse_atom(Parser *parser) {
 	    && (term = parse_expression(parser))
 	    && scan_token(parser, TOKEN_RESERVED_PUNCTUATION, ")"))
 		return result;
+
+	if (result)
+		parser_error(parser, "expected symbol following unary operator");
 	return NULL;
 }
 
@@ -319,6 +322,10 @@ static ASTNode *parse_block(Parser *parser) {
 	Environment *prev_env = parser->env;
 	parser->env = result->data.block.env;
 	result->data.block.left = parse_statements(parser);
+
+	if (parser->error) // TODO: Having to do this everywhere is annoying.
+		return NULL;
+
 	if (!scan_token(parser, TOKEN_RESERVED_PUNCTUATION, "}")) {
 		parser_error(parser, "expected closing brace after block");
 		return NULL;
@@ -466,18 +473,13 @@ static ASTNode *parse_statements(Parser *parser) {
 
 	ASTNode **current = &result;
 	ASTNode *statement;
-	while (!eof(parser)) {
+	while (!eof(parser)) { // TODO: Node structure should be MemoryList of stmts
 		if ((!(statement = parse_statement(parser)) || parser->error))
 			break;
 
 		if (!(*current)) {
 			*current = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
 			initialise_node(*current, NODE_STATEMENTS);
-
-			// PLAN: When we different environments associated with nodes we simply
-			// save the current environment, set the current environment to a new env,
-			// parse statements under this new env, and then restore the old env.
-			(*current)->data.block.env = parser->env;
 		}
 		(*current)->data.block.left = statement;
 		(*current)->data.block.right = NULL;

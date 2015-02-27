@@ -6,7 +6,7 @@ SOURCES=compiler.cpp lex.cpp parser.cpp codegen.cpp ast.cpp helpers.cpp memoryar
 OBJECTS=$(SOURCES:.cpp=.o)
 
 # TODO: Actually think through dependencies properly.
-# I've hit a few cases where weird bugs occur because I wrote the Makefile poorly.
+# I've had a fair few bugs due to poor Makefile dependencies so far.
 
 phosphor: $(OBJECTS)
 	$(CC) $(LDFLAGS) -o phosphor $(OBJECTS) $(LDLIBS) 

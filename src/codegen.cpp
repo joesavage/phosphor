@@ -70,6 +70,9 @@ static PValue codegen_expression(CodeGenerator *generator, ASTNode *node) {
 				PValue *var_sym = lookup_symbol(generator, symbol_name.value);
 				PValue value = codegen_expression(generator, pnode.right);
 
+				if (generator->error)
+					break;
+
 				if (lookup_type(generator, value) != lookup_type(generator, *var_sym)) {
 					// TODO: Type conversions (factor out) - for integers, using Trunc or ZExt/SExt (getIntegerBitWidth).
 					codegen_error(generator, "type mismatch in assignment");
@@ -121,23 +124,30 @@ static PValue codegen_expression(CodeGenerator *generator, ASTNode *node) {
 			DECL_ASTNODE_DATA(node, function_call, pnode)
 			char *function_name = pnode.name->data.string.value;
 			Function *function = generator->module->getFunction(function_name);
-			if (!function) {
+			PFunction pfunction = lookup_function(generator, function_name);
+			if (!function || !pfunction.return_type) {
 				codegen_error(generator, "unknown function referenced '%s'", function_name);
 				break;
 			}
 
 			size_t args_count = pnode.args.size();
-			MemoryList<Value *> args(args_count);
-			for (size_t i = 0; i < args_count; ++i)
-				args.add(codegen_expression(generator, pnode.args[i]).value);
-
-			// TODO: Check arguments match the signature! (no. and type)
-
-			PFunction pfunction = lookup_function(generator, function_name);
-			if (!pfunction.return_type) {
-				codegen_error(generator, "failed to find function '%s'", function_name);
+			if (args_count != pfunction.arg_types.size()) {
+				codegen_error(generator, "function parameter number mismatch - expected %d, got %d", pfunction.arg_types.size(), args_count);
 				break;
 			}
+
+			MemoryList<Value *> args(args_count);
+			for (size_t i = 0; i < args_count; ++i) {
+				PValue arg = codegen_expression(generator, pnode.args[i]);
+				args.add(arg.value);
+				if (lookup_type(generator, arg.type) != lookup_type(generator, pfunction.arg_types[i])) {
+					codegen_error(generator, "function parameter mis-match at param %d", i);
+					break;
+				}
+			}
+
+			if (generator->error)
+				break;
 
 			result.type = pfunction.return_type;
 			result.value = builder.CreateCall(function, ArrayRef<Value *>(args.getPointer(0), args_count), "calltmp");
@@ -210,7 +220,11 @@ static PFunction codegen_function(CodeGenerator *generator, ASTNode *node) {
 			for (size_t i = 0; i < args_count; ++i) {
 				DECL_ASTNODE_DATA(pnode.args[i], variable_declaration, arg)
 				codegen_statement(generator, pnode.args[i]);
-				PType type = lookup_type(generator, arg.type->data.string.value);
+
+				char *type_name = arg.type->data.string.value;
+				result.arg_types.add(type_name);
+
+				PType type = lookup_type(generator, type_name);
 				args.add(type.type);
 			}
 
@@ -238,7 +252,19 @@ static PFunction codegen_function(CodeGenerator *generator, ASTNode *node) {
 					break;
 				}
 
-				// TODO: Function argument check
+				if (pfunction.arg_types.size() != result.arg_types.size()) {
+					codegen_error(generator, "redefinition of function with parameter number mismatch - expected %d, got %d", pfunction.arg_types.size(), args_count);
+					break;
+				}
+				for (size_t i = 0; i < pfunction.arg_types.size(); ++i) {
+					if (lookup_type(generator, pfunction.arg_types[i]) != lookup_type(generator, result.arg_types[i])) {
+						codegen_error(generator, "redefinition of function with parameter mis-match at param %d", i);
+						break;
+					}
+				}
+				if (generator->error)
+					break;
+
 				result = pfunction;
 			} else {
 				result.value = function;
@@ -278,15 +304,12 @@ static void codegen_statement(CodeGenerator *generator, ASTNode *node) {
 	switch (node->type) {
 		case NODE_STATEMENTS:
 		{
-			Environment *previous_env = generator->env;
-			generator->env = node->data.block.env;
 			do {
 				if (node->data.block.left)
 					codegen_statement(generator, node->data.block.left);
 				if (generator->error)
 					return;
 			} while ((node = node->data.block.right));
-			generator->env = previous_env;
 			break;
 		}
 		case NODE_VARIABLE_DECLARATION:

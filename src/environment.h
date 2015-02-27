@@ -52,6 +52,7 @@ struct PValue {
 struct PFunction {
 	char *return_type;
 	Function *value;
+	MemoryList<char *> arg_types;
 
 	PFunction() {
 		return_type = NULL;
