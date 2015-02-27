@@ -56,6 +56,9 @@ static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 				printf_ast(node->binary_operator.left, "LEFT", depth + 1);
 				printf_ast(node->binary_operator.right, "RIGHT", depth + 1);
 				break;
+            case NODE_CONSTANT_BOOL:
+                printf("INT<%zu>\n", node->integer.value);
+                break;
 			case NODE_TYPE:
 			case NODE_IDENTIFIER:
 			case NODE_CONSTANT_INT:

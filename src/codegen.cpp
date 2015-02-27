@@ -96,7 +96,13 @@ static PValue codegen_expression(CodeGenerator *generator, ASTNode *node) {
 			}
 
 			result.type = left.type;
-			if (!strcmp(node->string.value, "+")) {
+			if (!strcmp(node->string.value, "==")) {
+				result.type = "bool";
+				result.value = builder.CreateICmpEQ(left.value, right.value, "eqtmp");
+			} else if (!strcmp(node->string.value, "!=")) {
+				result.type = "bool";
+				result.value = builder.CreateICmpNE(left.value, right.value, "eqtmp");
+			} else if (!strcmp(node->string.value, "+")) {
 				result.value = builder.CreateAdd(left.value, right.value, "addtmp");
 			} else if (!strcmp(node->string.value, "*")) {
 				result.value = builder.CreateMul(left.value, right.value, "multmp");
@@ -146,6 +152,14 @@ static PValue codegen_expression(CodeGenerator *generator, ASTNode *node) {
 			// compilation).
 			result.type = "int32";
 			result.value = ConstantInt::get(getGlobalContext(), APInt(32, StringRef(node->string.value), 10));
+			break;
+		}
+		case NODE_CONSTANT_BOOL:
+		{
+			result.type = "bool";
+			// TODO: Use the type table information to construct (e.g. numbits) rather
+			// than duplicating it.
+			result.value = ConstantInt::get(getGlobalContext(), APInt(1, node->integer.value));
 			break;
 		}
 		case NODE_CONSTANT_FLOAT:
@@ -289,9 +303,14 @@ static void codegen_statement(CodeGenerator *generator, ASTNode *node) {
 			break;
 		case NODE_IF:
 		{
-			// TODO: Switch to using more proper boolean comparison (type i1)
 			PValue cond = codegen_expression(generator, node->conditional.condition);
-			cond.value = builder.CreateICmpNE(cond.value, ConstantInt::get(getGlobalContext(), APInt(32, 0)), "ifcond");
+
+			if (lookup_type(generator, cond) != lookup_type(generator, "bool")) {
+				codegen_error(generator, "unsupported type for if statement condition");
+				break;
+			}
+
+			cond.value = builder.CreateICmpNE(cond.value, ConstantInt::get(getGlobalContext(), APInt(1, 0)), "ifcond");
 
 			Function *function = builder.GetInsertBlock()->getParent();
 			BasicBlock *then = BasicBlock::Create(getGlobalContext(), "then", function);
@@ -329,9 +348,15 @@ static void codegen_statement(CodeGenerator *generator, ASTNode *node) {
 			builder.CreateBr(preloop);
 
 			builder.SetInsertPoint(preloop);
-			// TODO: Switch to using more proper boolean comparison?
+
 			PValue cond = codegen_expression(generator, node->conditional.condition);
-			cond.value = builder.CreateICmpNE(cond.value, ConstantInt::get(getGlobalContext(), APInt(32, 0)), "whilecond");
+
+			if (lookup_type(generator, cond) != lookup_type(generator, "bool")) {
+				codegen_error(generator, "unsupported type for while statement condition");
+				break;
+			}
+
+			cond.value = builder.CreateICmpNE(cond.value, ConstantInt::get(getGlobalContext(), APInt(1, 0)), "whilecond");
 			builder.CreateCondBr(cond.value, loop, after);
 
 			// TODO: Handle 'other' branch (while..else)

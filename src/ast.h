@@ -27,6 +27,7 @@ enum ASTNodeType {
 	NODE_BINARY_OPERATOR,
 	NODE_CONSTANT_INT,
 	NODE_CONSTANT_FLOAT,
+	NODE_CONSTANT_BOOL,
 	NODE_CONSTANT_STRING
 };
 
@@ -41,7 +42,7 @@ struct ASTNode {
 		} real; // NOTE: Currently unused
 		struct {
 			size_t value;
-		} integer; // NOTE: Currently unused
+		} integer;
 		struct {
 			char *value;
 		} string;

@@ -56,6 +56,9 @@ ASTNode::ASTNode(ASTNodeType type) {
 			binary_operator.left = NULL;
 			binary_operator.right = NULL;
 			break;
+		case NODE_CONSTANT_BOOL:
+			integer.value = 0;
+			break;
 		case NODE_IDENTIFIER:
 		case NODE_TYPE:
 		case NODE_CONSTANT_INT:

@@ -92,6 +92,16 @@ static ASTNode *parse_constant(Parser *parser) {
 		result = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
 		*result = ASTNode(NODE_CONSTANT_STRING);
 		result->string.value = token->value;
+	} else if (peek_token(parser, TOKEN_KEYWORD, "true")) {
+		++parser->cursor;
+		result = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
+		*result = ASTNode(NODE_CONSTANT_BOOL);
+		result->integer.value = 1;
+	} else if (peek_token(parser, TOKEN_KEYWORD, "false")) {
+		++parser->cursor;
+		result = (ASTNode *)parser->nodes.reserve(sizeof(ASTNode));
+		*result = ASTNode(NODE_CONSTANT_BOOL);
+		result->integer.value = 0;
 	}
 	
 	return result;
@@ -216,6 +226,7 @@ static ASTNode *parse_atom(Parser *parser) {
 			return result;
 		}
 	}
+
 	if ((term = parse_constant(parser)))
 		return result;
 	if (scan_token(parser, TOKEN_RESERVED_PUNCTUATION, "(")
@@ -261,8 +272,6 @@ ASTNode *parse_expression(Parser *parser, unsigned char minimum_precedence) {
 		right = parse_expression(parser, next_minimum_precedence);
 
 		if (!right) {
-			free(op);
-			free(result);
 			parser_error(parser, "expected expression after operator");
 			return NULL;
 		}

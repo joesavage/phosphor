@@ -7,14 +7,14 @@ fn putchar(int32 ch) -> int32;
 
 fn main() -> void {
 	int32 a;
-	a = 5;
+	a = 2;
+	return a + 12 * 2;
 
 	{
-		int32 a;
-		a = 2;
-		return a + 12 * 2;
+		bool b;
+		b = true;
 
-		while (a) {
+		while (a != 2) {
 			return a;
 		}
 
