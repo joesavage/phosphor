@@ -1,6 +1,5 @@
 #include "llvm/IR/Verifier.h"
 #include "llvm/IR/DerivedTypes.h"
-#include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/CallingConv.h"
 
@@ -17,14 +16,8 @@ using namespace llvm;
 // TODO: At some point, we need to focus on quality of the LLVM IR generated.
 //       [COMPARE TO: $ clang -S -emit-llvm foo.c]
 
-// TODO: Move this somewhere nicer?
-static void codegen_statement(CodeGenerator *generator, ASTNode *node);
-
-// TODO: Move this into the CodeGenerator struct. Or something.
-static IRBuilder<> builder(getGlobalContext());
-
-static void codegen_error(CodeGenerator *generator, const char *format, ...) {
-	free(generator->error);
+void CodeGenerator::set_error(const char *format, ...) {
+	free(error);
 
 	char *buffer = (char *)heap_alloc(512);
 	va_list arglist;
@@ -32,125 +25,131 @@ static void codegen_error(CodeGenerator *generator, const char *format, ...) {
 	vsnprintf(buffer, 512, format, arglist);
 	va_end(arglist);
 
-	generator->error = buffer;
+	error = buffer;
 }
 
-static PType lookup_type(CodeGenerator *generator, PValue value) {
-	PType *type = search_for_type(*generator->env, value.type);
+PType CodeGenerator::lookup_type(PValue value) {
+	PType *type = search_for_type(*env, value.type);
 	return type ? *type : PType();
 }
 
-static PType lookup_type(CodeGenerator *generator, char *value) {
-	PType *type = search_for_type(*generator->env, value);
+PType CodeGenerator::lookup_type(char *value) {
+	PType *type = search_for_type(*env, value);
 	return type ? *type : PType();
 }
 
-static PFunction lookup_function(CodeGenerator *generator, char *name) {
-	PFunction *function = search_for_function(*generator->env, name);
+PFunction CodeGenerator::lookup_function(char *name) {
+	PFunction *function = search_for_function(*env, name);
 	return function ? *function : PFunction();
 }
 
 // NOTE: Keeping pointers to these is dangerous as if the HashMap resizes it'll
-// cause pointer invalidation.
-static PValue *lookup_symbol(CodeGenerator *generator, char *symbol) {
-	return search_for_symbol(*generator->env, symbol);
+// cause pointer invalidation. We can probably switch to value semantics soon?
+PValue *CodeGenerator::lookup_symbol(char *symbol) {
+	return search_for_symbol(*env, symbol);
 }
 
 
-static PValue codegen_expression(CodeGenerator *generator, ASTNode *node) {
+PValue CodeGenerator::generate_expression(ASTNode *node) {
 	PValue result;
 
 	switch (node->type) {
 		case NODE_BINARY_OPERATOR:
 		{
-			DECL_ASTNODE_DATA(node, binary_operator, pnode)
+			DECL_ASTNODE_DATA(node, binary_operator, pnode);
 
 			if (!strcmp(pnode.value, "=")) {
-				DECL_ASTNODE_DATA(pnode.left, string, symbol_name)
-				PValue *var_sym = lookup_symbol(generator, symbol_name.value);
-				PValue value = codegen_expression(generator, pnode.right);
+				DECL_ASTNODE_DATA(pnode.left, string, symbol_name);
+				PValue *var_sym = lookup_symbol(symbol_name.value);
+				PValue value = generate_expression(pnode.right);
 
-				if (generator->error)
+				if (error)
 					break;
 
-				if (lookup_type(generator, value) != lookup_type(generator, *var_sym)) {
-					// TODO: Type conversions (factor out) - for integers, using Trunc or ZExt/SExt (getIntegerBitWidth).
-					codegen_error(generator, "type mismatch in assignment");
+				if (lookup_type(value) != lookup_type(*var_sym)) {
+					// TODO: Type conversions (factor out) - for integers, using Trunc or
+					// ZExt/SExt (getIntegerBitWidth).
+					set_error("type mismatch in assignment");
 					break;
 				}
 
-				// TODO: This side-effect means that all assignment expressions end up being immediately executed.
-				// This is obviously less than ideal, and so we need to implement mutable state by allocating memory.
+				// TODO: This side-effect means that all assignment expressions end up
+				// being immediately executed. This is obviously less than ideal, and so
+				// we need to implement mutable state by allocating memory.
 				var_sym->value = value.value;
 				break;
 			}
 
 
-			PValue left = codegen_expression(generator, pnode.left);
-			PValue right = codegen_expression(generator, pnode.right);
+			PValue left = generate_expression(pnode.left);
+			PValue right = generate_expression(pnode.right);
 
-			if (lookup_type(generator, left) != lookup_type(generator, right)) {
-				codegen_error(generator, "type mismatch in addition operation!");
+			if (lookup_type(left) != lookup_type(right)) {
+				set_error("type mismatch in addition operation!");
 				break;
 			}
 
 			// Right now, we only have hardcoded support for (32-bit) integers.
-			if (lookup_type(generator, left).type != IntegerType::get(getGlobalContext(), 32)) {
-				codegen_error(generator, "unsupported type for binary operation");
+			if (lookup_type(left).type != IntegerType::get(getGlobalContext(), 32)) {
+				set_error("unsupported type for binary operation");
 				break;
 			}
 
 			result.type = left.type;
 			if (!strcmp(pnode.value, "==")) {
 				result.type = "bool";
-				result.value = builder.CreateICmpEQ(left.value, right.value, "eqtmp");
+				result.value = builder->CreateICmpEQ(left.value, right.value, "eqtmp");
 			} else if (!strcmp(pnode.value, "!=")) {
 				result.type = "bool";
-				result.value = builder.CreateICmpNE(left.value, right.value, "eqtmp");
+				result.value = builder->CreateICmpNE(left.value, right.value, "eqtmp");
 			} else if (!strcmp(pnode.value, "+")) {
-				result.value = builder.CreateAdd(left.value, right.value, "addtmp");
+				result.value = builder->CreateAdd(left.value, right.value, "addtmp");
 			} else if (!strcmp(pnode.value, "*")) {
-				result.value = builder.CreateMul(left.value, right.value, "multmp");
+				result.value = builder->CreateMul(left.value, right.value, "multmp");
 			} else if (!strcmp(pnode.value, "/")) {
 				// TODO: Handle unsigned
-				result.value = builder.CreateSDiv(left.value, right.value, "divtmp");
+				result.value = builder->CreateSDiv(left.value, right.value, "divtmp");
 			} else if (!strcmp(pnode.value, "-")) {
-				result.value = builder.CreateSub(left.value, right.value, "subtmp");
+				result.value = builder->CreateSub(left.value, right.value, "subtmp");
 			}
 			break;
 		}
 		case NODE_FUNCTION_CALL:
 		{
-			DECL_ASTNODE_DATA(node, function_call, pnode)
+			DECL_ASTNODE_DATA(node, function_call, pnode);
 			char *function_name = pnode.name->data.string.value;
-			Function *function = generator->module->getFunction(function_name);
-			PFunction pfunction = lookup_function(generator, function_name);
+			Function *function = module->getFunction(function_name);
+			PFunction pfunction = lookup_function(function_name);
 			if (!function || !pfunction.return_type) {
-				codegen_error(generator, "unknown function referenced '%s'", function_name);
+				set_error("unknown function referenced '%s'", function_name);
 				break;
 			}
 
 			size_t args_count = pnode.args.size();
 			if (args_count != pfunction.arg_types.size()) {
-				codegen_error(generator, "function parameter number mismatch - expected %d, got %d", pfunction.arg_types.size(), args_count);
+				set_error("function parameter number mismatch - expected %d, got %d",
+				          pfunction.arg_types.size(), args_count);
 				break;
 			}
 
 			MemoryList<Value *> args(args_count);
 			for (size_t i = 0; i < args_count; ++i) {
-				PValue arg = codegen_expression(generator, pnode.args[i]);
+				PValue arg = generate_expression(pnode.args[i]);
 				args.add(arg.value);
-				if (lookup_type(generator, arg.type) != lookup_type(generator, pfunction.arg_types[i])) {
-					codegen_error(generator, "function parameter mis-match at param %d", i);
+				if (lookup_type(arg.type) != lookup_type(pfunction.arg_types[i])) {
+					set_error("function parameter mis-match at param %d", i);
 					break;
 				}
 			}
 
-			if (generator->error)
+			if (error)
 				break;
 
 			result.type = pfunction.return_type;
-			result.value = builder.CreateCall(function, ArrayRef<Value *>(args.getPointer(0), args_count), "calltmp");
+			result.value = builder->CreateCall(function,
+			                                   ArrayRef<Value *>(args.getPointer(0),
+			                                                     args_count),
+			                                   "calltmp");
 			break;
 		}
 		case NODE_CONSTANT_INT:
@@ -163,18 +162,20 @@ static PValue codegen_expression(CodeGenerator *generator, ASTNode *node) {
 			//
 			// TODO: Need to deal with hex, etc. (probably earlier than this stage of
 			// compilation).
-			DECL_ASTNODE_DATA(node, string, pnode)
+			DECL_ASTNODE_DATA(node, string, pnode);
 			result.type = "int32";
-			result.value = ConstantInt::get(getGlobalContext(), APInt(32, StringRef(pnode.value), 10));
+			result.value = ConstantInt::get(getGlobalContext(),
+			                                APInt(32, StringRef(pnode.value), 10));
 			break;
 		}
 		case NODE_CONSTANT_BOOL:
 		{
-			DECL_ASTNODE_DATA(node, integer, pnode)
+			DECL_ASTNODE_DATA(node, integer, pnode);
 			result.type = "bool";
 			// TODO: Use the type table information to construct (e.g. numbits) rather
 			// than duplicating it.
-			result.value = ConstantInt::get(getGlobalContext(), APInt(1, pnode.value));
+			result.value = ConstantInt::get(getGlobalContext(),
+			                                APInt(1, pnode.value));
 			break;
 		}
 		case NODE_CONSTANT_FLOAT:
@@ -182,7 +183,7 @@ static PValue codegen_expression(CodeGenerator *generator, ASTNode *node) {
 			// TODO: This seems like a pretty terrible way to initialize an APFloat.
 			// TODO: Also, we probably want to deal with oversized floats or whatever
 			// here.
-			DECL_ASTNODE_DATA(node, string, pnode)
+			DECL_ASTNODE_DATA(node, string, pnode);
 			result.type = "float32";
 			APFloat number(0.0);
 			number.convertFromString(pnode.value, APFloat::rmNearestTiesToEven);
@@ -191,78 +192,88 @@ static PValue codegen_expression(CodeGenerator *generator, ASTNode *node) {
 		}
 		case NODE_IDENTIFIER:
 		{
-			DECL_ASTNODE_DATA(node, string, pnode)
-			PValue *value = lookup_symbol(generator, pnode.value);
+			DECL_ASTNODE_DATA(node, string, pnode);
+			PValue *value = lookup_symbol(pnode.value);
 			if (!value)
-				codegen_error(generator, "failed to find symbol '%s'", pnode.value);
+				set_error("failed to find symbol '%s'", pnode.value);
 			return *value;
 		}
 		default:
-			codegen_error(generator, "failed to generate expression for ASTNode");
+			set_error("failed to generate expression for ASTNode");
 			break;
 	}
 
 	return result;
 }
 
-static PFunction codegen_function(CodeGenerator *generator, ASTNode *node) {
+PFunction CodeGenerator::generate_function(ASTNode *node) {
 	PFunction result;
 
 	switch (node->type) {
 		case NODE_FUNCTION_SIGNATURE:
 		{
-			DECL_ASTNODE_DATA(node, function_signature, pnode)
-			Environment *previous_env = generator->env;
-			generator->env = pnode.env;
+			DECL_ASTNODE_DATA(node, function_signature, pnode);
+			Environment *previous_env = env;
+			env = pnode.env;
 
 			size_t args_count = pnode.args.size();
 			MemoryList<Type *> args(args_count);
 			for (size_t i = 0; i < args_count; ++i) {
-				DECL_ASTNODE_DATA(pnode.args[i], variable_declaration, arg)
-				codegen_statement(generator, pnode.args[i]);
+				DECL_ASTNODE_DATA(pnode.args[i], variable_declaration, arg);
+				generate_statement(pnode.args[i]);
 
 				char *type_name = arg.type->data.string.value;
 				result.arg_types.add(type_name);
 
-				PType type = lookup_type(generator, type_name);
+				PType type = lookup_type(type_name);
 				args.add(type.type);
 			}
 
 			// TODO: Needle to handle redefinitions
 			char *function_name = pnode.name->data.string.value;
 			char *function_type_name = pnode.type->data.string.value;
-			FunctionType *function_type = FunctionType::get(lookup_type(generator, function_type_name).type, ArrayRef<Type *>(args.getPointer(0), args_count), false);
-			Function *function = Function::Create(function_type, Function::ExternalLinkage, function_name, generator->module);
+			FunctionType *function_type;
+			Function *function;
+			function_type = FunctionType::get(lookup_type(function_type_name).type,
+			                                  ArrayRef<Type *>(args.getPointer(0),
+			                                                   args_count),
+			                                  false);
+			function = Function::Create(function_type, Function::ExternalLinkage,
+			                            function_name, module);
 			function->addFnAttr(Attribute::NoUnwind);
 
 			// If the name we got back isn't the one we assigned, there was a conflict
 			if (function->getName() != function_name) {
 				// Erase the just-created signature, and get the previous one.
 				function->eraseFromParent();
-				function = generator->module->getFunction(function_name);
+				function = module->getFunction(function_name);
 
 				if (!function->empty()) {
-					codegen_error(generator, "redefinition of function is not allowed");
+					set_error("redefinition of function is not allowed");
 					break;
 				}
 
-				PFunction pfunction = lookup_function(generator, function_name);
+				PFunction pfunction = lookup_function(function_name);
 				if (!pfunction.return_type) {
-					codegen_error(generator, "conflict between LLVM and function table state");
+					set_error("conflict between LLVM and function table state");
 					break;
 				}
 
 				if (pfunction.arg_types.size() != result.arg_types.size()) {
-					codegen_error(generator, "redefinition of function with parameter number mismatch - expected %d, got %d", pfunction.arg_types.size(), args_count);
+					set_error("redefinition of function with parameter number mismatch \
+					 - expected %d, got %d", pfunction.arg_types.size(), args_count);
 					break;
 				}
 				for (size_t i = 0; i < pfunction.arg_types.size(); ++i) {
-					if (lookup_type(generator, pfunction.arg_types[i]) != lookup_type(generator, result.arg_types[i])) {
-						codegen_error(generator, "redefinition of function with parameter mis-match at param %d", i);
+					PType expected_type = lookup_type(pfunction.arg_types[i]);
+					PType actual_type = lookup_type(result.arg_types[i]);
+					if (actual_type != expected_type) {
+						set_error("redefinition of function with parameter mis-match \
+						 at param %d", i);
 						break;
 					}
 				}
-				if (generator->error)
+				if (error)
 					break;
 
 				result = pfunction;
@@ -272,145 +283,153 @@ static PFunction codegen_function(CodeGenerator *generator, ASTNode *node) {
 				previous_env->function_table.set(function_name, result);
 			}
 
-			generator->env = previous_env;
+			env = previous_env;
 			break;
 		}
 		case NODE_FUNCTION:
 		{
-			DECL_ASTNODE_DATA(node, function, pnode)
-			PFunction function = codegen_function(generator, pnode.signature);
-			BasicBlock *BB = BasicBlock::Create(getGlobalContext(), "entry", function.value);
-			builder.SetInsertPoint(BB);
+			DECL_ASTNODE_DATA(node, function, pnode);
+			PFunction function = generate_function(pnode.signature);
+			BasicBlock *BB = BasicBlock::Create(getGlobalContext(), "entry",
+			                                    function.value);
+			builder->SetInsertPoint(BB);
 
-			Environment *prev_env = generator->env; // TODO: Helper for env push/pop
-			generator->env = pnode.signature->data.function_signature.env;
+			Environment *prev_env = env; // TODO: Helper for env push/pop
+			env = pnode.signature->data.function_signature.env;
 
-			codegen_statement(generator, pnode.body);
+			generate_statement(pnode.body);
 
-			generator->env = prev_env;
+			env = prev_env;
 
 			result = function;
 			break;
 		}
 		default:
-			codegen_error(generator, "unexpected token for function code generation");
+			set_error("unexpected token for function code generation");
 			break;
 	}
 
 	return result;
 }
 
-static void codegen_statement(CodeGenerator *generator, ASTNode *node) {
+void CodeGenerator::generate_statement(ASTNode *node) {
 	switch (node->type) {
 		case NODE_STATEMENTS:
 		{
 			do {
 				if (node->data.block.left)
-					codegen_statement(generator, node->data.block.left);
-				if (generator->error)
+					generate_statement(node->data.block.left);
+				if (error)
 					return;
 			} while ((node = node->data.block.right));
 			break;
 		}
 		case NODE_VARIABLE_DECLARATION:
 		{
-			DECL_ASTNODE_DATA(node, variable_declaration, pnode)
+			DECL_ASTNODE_DATA(node, variable_declaration, pnode);
 			PValue variable(pnode.type->data.string.value, NULL);
-			generator->env->symbol_table.set(pnode.name->data.string.value, variable);
+			env->symbol_table.set(pnode.name->data.string.value, variable);
 			break;
 		}
 		case NODE_BLOCK:
 		{
-			DECL_ASTNODE_DATA(node, block, pnode)
-			codegen_statement(generator, pnode.left);
+			DECL_ASTNODE_DATA(node, block, pnode);
+			generate_statement(pnode.left);
 			break;
 		}
 		case NODE_UNARY_OPERATOR:
 		case NODE_BINARY_OPERATOR:
-			codegen_expression(generator, node);
+			generate_expression(node);
 			break;
 		case NODE_FUNCTION_SIGNATURE:
 		case NODE_FUNCTION:
-			codegen_function(generator, node);
+			generate_function(node);
 			break;
 		case NODE_FUNCTION_CALL:
-			codegen_expression(generator, node);
+			generate_expression(node);
 			break;
 		case NODE_IF:
 		{
-			DECL_ASTNODE_DATA(node, conditional, pnode)
-			PValue cond = codegen_expression(generator, pnode.condition);
-
-			if (lookup_type(generator, cond) != lookup_type(generator, "bool")) {
-				codegen_error(generator, "unsupported type for if statement condition");
+			DECL_ASTNODE_DATA(node, conditional, pnode);
+			PValue cond = generate_expression(pnode.condition);
+			if (lookup_type(cond) != lookup_type("bool")) {
+				set_error("unsupported type for if statement condition");
 				break;
 			}
+			// TODO: Factor 'ConstantInt' for 'true' so it can be easily reused.
+			cond.value = builder->CreateICmpNE(cond.value,
+			                                   ConstantInt::get(getGlobalContext(),
+			                                                    APInt(1, 0)),
+			                                   "ifcond");
 
-			cond.value = builder.CreateICmpNE(cond.value, ConstantInt::get(getGlobalContext(), APInt(1, 0)), "ifcond");
+			Function *function;
+			BasicBlock *then, *other, *merge;
 
-			Function *function = builder.GetInsertBlock()->getParent();
-			BasicBlock *then = BasicBlock::Create(getGlobalContext(), "then", function);
-			BasicBlock *other = BasicBlock::Create(getGlobalContext(), "else", function);
-			BasicBlock *merge = BasicBlock::Create(getGlobalContext(), "ifcont", function);
-			builder.CreateCondBr(cond.value, then, other);
+			function = builder->GetInsertBlock()->getParent();
+			then = BasicBlock::Create(getGlobalContext(), "then", function);
+			other = BasicBlock::Create(getGlobalContext(), "else", function);
+			merge = BasicBlock::Create(getGlobalContext(), "ifcont", function);
+			builder->CreateCondBr(cond.value, then, other);
 
-			// 'Then' block
-			builder.SetInsertPoint(then);
-			codegen_statement(generator, pnode.then);
-			builder.CreateBr(merge);
-			then = builder.GetInsertBlock();
+			builder->SetInsertPoint(then);
+			generate_statement(pnode.then);
+			builder->CreateBr(merge);
+			then = builder->GetInsertBlock();
 
-			// 'Else' block
-			builder.SetInsertPoint(other);
-			if (pnode.other)
-				codegen_statement(generator, pnode.other);
-			builder.CreateBr(merge);
-			other = builder.GetInsertBlock();
+			builder->SetInsertPoint(other);
+			if (pnode.other) // TODO: Rename 'other' (closer to 'else')
+				generate_statement(pnode.other);
+			builder->CreateBr(merge);
+			other = builder->GetInsertBlock();
 
 			// TODO: Is returning from inside blocks an issue? It doesn't seem to be,
 			// but also I've seen people use phi nodes for this kind of purpose.
 			// Can we rely on an optimise pass to make that happen? Hmm..
 
-			// 'Merge' block
-			builder.SetInsertPoint(merge);
+			builder->SetInsertPoint(merge);
 			break;
 		}
 		case NODE_WHILE_LOOP:
 		{
-			DECL_ASTNODE_DATA(node, conditional, pnode)
-			Function *function = builder.GetInsertBlock()->getParent();
-			BasicBlock *preloop = BasicBlock::Create(getGlobalContext(), "prewhile", function);
-			BasicBlock *loop = BasicBlock::Create(getGlobalContext(), "while", function);
-			BasicBlock *after = BasicBlock::Create(getGlobalContext(), "afterwhile", function);
-			builder.CreateBr(preloop);
+			DECL_ASTNODE_DATA(node, conditional, pnode);
+			Function *function;
+			BasicBlock *preloop, *loop, *after;
 
-			builder.SetInsertPoint(preloop);
+			function = builder->GetInsertBlock()->getParent();
+			preloop = BasicBlock::Create(getGlobalContext(), "prewhile", function);
+			loop = BasicBlock::Create(getGlobalContext(), "while", function);
+			after = BasicBlock::Create(getGlobalContext(), "afterwhile", function);
+			builder->CreateBr(preloop);
 
-			PValue cond = codegen_expression(generator, pnode.condition);
+			builder->SetInsertPoint(preloop);
+			PValue cond = generate_expression(pnode.condition);
 
-			if (lookup_type(generator, cond) != lookup_type(generator, "bool")) {
-				codegen_error(generator, "unsupported type for while statement condition");
+			if (lookup_type(cond) != lookup_type("bool")) {
+				set_error("unsupported type for while statement condition");
 				break;
 			}
 
-			cond.value = builder.CreateICmpNE(cond.value, ConstantInt::get(getGlobalContext(), APInt(1, 0)), "whilecond");
-			builder.CreateCondBr(cond.value, loop, after);
+			cond.value = builder->CreateICmpNE(cond.value,
+			                                   ConstantInt::get(getGlobalContext(),
+			                                                    APInt(1, 0)),
+			                                   "whilecond");
+			builder->CreateCondBr(cond.value, loop, after);
 
 			// TODO: Handle 'other' branch (while..else)
 
-			builder.SetInsertPoint(loop);
-			codegen_statement(generator, pnode.then);
-			builder.CreateBr(preloop);
+			builder->SetInsertPoint(loop);
+			generate_statement(pnode.then);
+			builder->CreateBr(preloop);
 
-			builder.SetInsertPoint(after);
+			builder->SetInsertPoint(after);
 			break;
 		}
 		case NODE_RETURN:
 		{
-			DECL_ASTNODE_DATA(node, unary_operator, pnode)
-			PValue val = codegen_expression(generator, pnode.operand);
+			DECL_ASTNODE_DATA(node, unary_operator, pnode);
+			PValue val = generate_expression(pnode.operand);
 			// TODO: Type check
-			builder.CreateRet(val.value);
+			builder->CreateRet(val.value);
 			break;
 		}
 		case NODE_DO_LOOP:
@@ -418,28 +437,30 @@ static void codegen_statement(CodeGenerator *generator, ASTNode *node) {
 		case NODE_FOR_LOOP:
 		case NODE_BREAK:
 		case NODE_CONTINUE:
-			codegen_error(generator, "feature not yet implemented!");
+			set_error("feature not yet implemented!");
 			break;
 		case NODE_CONSTANT_INT:
 		case NODE_CONSTANT_FLOAT:
 		case NODE_CONSTANT_STRING:
 			break;
 		default:
-			codegen_error(generator, "failed to generate statement for ASTNode");
+			set_error("failed to generate statement for ASTNode");
 			break;
 	}
 }
 
-void codegen(CodeGenerator *generator) {
-	generator->module = new Module("program", getGlobalContext());
+void CodeGenerator::generate() {
+	IRBuilder<> builder = IRBuilder<>(getGlobalContext());
+	this->builder = &builder;
+	module = new Module("program", getGlobalContext());
 
 	// TODO: Add module metadata here?
 
-	codegen_statement(generator, generator->root);
-	verifyModule(*generator->module);
+	generate_statement(root);
+	verifyModule(*module);
 
 	// TODO: Insert numerous code passes here (various optimisations, etc.)
 
-	generator->module->dump();
-	delete generator->module;
+	module->dump();
+	delete module;
 }

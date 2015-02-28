@@ -65,7 +65,8 @@ size_t MemoryList<T>::reserve(size_t length) {
 	size_t destination = _cursor;
 	_cursor += length + 1;
 
-	return destination / sizeof(T); // TODO: This mixing of T-rel and byte-rel is dumb.
+	// TODO: This mix of T-rel and byte-rel units is REALLY DUMB!
+	return destination / sizeof(T);
 }
 
 template <typename T>

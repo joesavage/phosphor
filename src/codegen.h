@@ -1,20 +1,32 @@
 #ifndef CODEGEN_H
 #define CODEGEN_H
 
-#include "llvm/IR/Module.h"
 #include "llvm/IR/Function.h"
+#include "llvm/IR/Module.h"
+#include "llvm/IR/IRBuilder.h"
 
 #include "ast.h"
 #include "environment.h"
 
+using namespace llvm;
+
 struct CodeGenerator {
 	ASTNode *root;
 	char *error;
-
 	Environment *env;
-	llvm::Module *module;
-};
+	Module *module;
+	IRBuilder<> *builder;
 
-void codegen(CodeGenerator *generator);
+	void generate();
+private:
+	void generate_statement(ASTNode *node);
+	PValue generate_expression(ASTNode *node);
+	PFunction generate_function(ASTNode *node);
+	PType lookup_type(PValue value);
+	PType lookup_type(char *value);
+	PFunction lookup_function(char *name);
+	PValue *lookup_symbol(char *symbol);
+	void set_error(const char *format, ...);
+};
 
 #endif

@@ -10,18 +10,23 @@
 
 // NOTE: We should probably do the decoding of values (e.g. numbers) here
 
-// NOTE: The errors in here need improving.
+// NOTE: The errors (and error flow) in here need improving.
 
-static int isoctal(int ch) { return '0' <= ch && ch <= '7'; }
-static int isbinary(int ch) { return '0' <= ch && ch <= '1'; }
+static int isoctal(int ch) {
+	return '0' <= ch && ch <= '7';
+}
+
+static int isbinary(int ch) {
+	return '0' <= ch && ch <= '1';
+}
 
 static bool is_radix_prefix(char ch) {
 	ch = tolower(ch);
 	return (ch == 'x' || ch == 'b' || ch == 'o');
 }
 
-static void lexer_error(Lexer *lexer, const char *format, ...) {
-	free(lexer->error);
+void Lexer::set_error(const char *format, ...) {
+	free(error);
 
 	char *buffer = (char *)heap_alloc(512);
 	va_list arglist;
@@ -29,105 +34,105 @@ static void lexer_error(Lexer *lexer, const char *format, ...) {
 	vsnprintf(buffer, 512, format, arglist);
 	va_end(arglist);
 
-	lexer->error = buffer;
+	error = buffer;
 }
 
-static bool peek_whitespace(Lexer *lexer) {
-	return isspace(lexer->cursor[0]);
+bool Lexer::peek_whitespace() {
+	return isspace(cursor[0]);
 }
 
-static bool peek_comment(Lexer *lexer) {
-	return (lexer->cursor[0] == '/' && lexer->cursor[1] == '/')
-	    || (lexer->cursor[0] == '/' && lexer->cursor[1] == '*');
+bool Lexer::peek_comment() {
+	return (cursor[0] == '/' && cursor[1] == '/')
+	    || (cursor[0] == '/' && cursor[1] == '*');
 }
 
-static bool peek_reserved_punctuation(Lexer *lexer) {
-	return lexer->cursor[0] == '(' || lexer->cursor[0] == ')'
-	    || lexer->cursor[0] == '{' || lexer->cursor[0] == '}'
-	    || lexer->cursor[0] == '[' || lexer->cursor[0] == ']'
-	    || lexer->cursor[0] == ';' || lexer->cursor[0] == '"'
-	    || lexer->cursor[0] == ',' || lexer->cursor[0] == '\'';
+bool Lexer::peek_reserved_punctuation() {
+	return cursor[0] == '(' || cursor[0] == ')'
+	    || cursor[0] == '{' || cursor[0] == '}'
+	    || cursor[0] == '[' || cursor[0] == ']'
+	    || cursor[0] == ';' || cursor[0] == '"'
+	    || cursor[0] == ',' || cursor[0] == '\'';
 }
 
-static void skip_whitespace(Lexer *lexer) {
-	while (peek_whitespace(lexer)) { 
-		if (lexer->cursor[0] == '\n') {
-			if (lexer->cursor[1] == '\r')
-				++lexer->cursor;
+void Lexer::skip_whitespace() {
+	while (peek_whitespace()) { 
+		if (cursor[0] == '\n') {
+			if (cursor[1] == '\r')
+				++cursor;
 
-			lexer->line_no++;
-			lexer->line_offset = ++lexer->cursor;
-		} else if (lexer->cursor[0] == '\r') {
-			if (lexer->cursor[1] == '\n')
-				++lexer->cursor;
+			line_no++;
+			line_offset = ++cursor;
+		} else if (cursor[0] == '\r') {
+			if (cursor[1] == '\n')
+				++cursor;
 
-			lexer->line_no++;
-			lexer->line_offset = ++lexer->cursor;
+			line_no++;
+			line_offset = ++cursor;
 		} else {
-			++lexer->cursor;
+			++cursor;
 		}
 	}
 }
 
-static void skip_comments(Lexer *lexer) { // TODO: Nested comments
-	while (peek_comment(lexer)) {
-		if (lexer->cursor[0] == '/' && lexer->cursor[1] == '*') {
-			lexer->cursor += 2;
-			if (!lexer->cursor[0]) {
-				lexer_error(lexer, "unterminated block comment");
+void Lexer::skip_comments() { // TODO: Nested comments
+	while (peek_comment()) {
+		if (cursor[0] == '/' && cursor[1] == '*') {
+			cursor += 2;
+			if (!cursor[0]) {
+				set_error("unterminated block comment");
 				return;
 			}
 
-			while(!(lexer->cursor[0] == '*' && lexer->cursor[1] == '/')) {
-				if (lexer->cursor[0] == 0 || lexer->cursor[1] == 0) {
-					lexer_error(lexer, "unterminated block comment");
+			while(!(cursor[0] == '*' && cursor[1] == '/')) {
+				if (cursor[0] == 0 || cursor[1] == 0) {
+					set_error("unterminated block comment");
 					return;
 				}
 
-				if (peek_whitespace(lexer))
-					skip_whitespace(lexer);
+				if (peek_whitespace())
+					skip_whitespace();
 				else
-					lexer->cursor++;
+					cursor++;
 			}
 
-			lexer->cursor += 2;
+			cursor += 2;
 		} else {
-			while (lexer->cursor[0] != 0
-			    && lexer->cursor[0] != '\n'
-			    && lexer->cursor[0] != '\r') {
-			    	lexer->cursor++;
+			while (cursor[0] != 0
+			    && cursor[0] != '\n'
+			    && cursor[0] != '\r') {
+			    	cursor++;
 			}
 
-			if (lexer->cursor[0])
-				skip_whitespace(lexer);
+			if (cursor[0])
+				skip_whitespace();
 		}
 	}
 }
 
-static bool scan_reserved_punctuation(Lexer *lexer, Token *token) {
+bool Lexer::scan_reserved_punctuation(PToken *token) {
 	token->type = TOKEN_RESERVED_PUNCTUATION;
-	token->value = lexer->memory->strndup(lexer->cursor++, 1);
+	token->value = memory->strndup(cursor++, 1);
 
 	return true;
 }
 
-static bool scan_punctuation(Lexer *lexer, Token *token) {
-	const char *begin = lexer->cursor;
+bool Lexer::scan_punctuation(PToken *token) {
+	const char *begin = cursor;
 
-	while (ispunct(lexer->cursor[0]) && !peek_reserved_punctuation(lexer))
-		lexer->cursor++;
+	while (ispunct(cursor[0]) && !peek_reserved_punctuation())
+		cursor++;
 
 	token->type = TOKEN_OPERATOR;
-	token->value = lexer->memory->strndup(begin, lexer->cursor - begin);
+	token->value = memory->strndup(begin, cursor - begin);
 
 	return true;
 }
 
-static bool scan_word(Lexer *lexer, Token *token) {
-	const char *begin = lexer->cursor;
+bool Lexer::scan_word(PToken *token) {
+	const char *begin = cursor;
 
-	while (isalnum(lexer->cursor[0]) || lexer->cursor[0] == '_')
-		lexer->cursor++;
+	while (isalnum(cursor[0]) || cursor[0] == '_')
+		cursor++;
 
 	bool is_keyword = false;
 	const char *keywords[] = {
@@ -136,26 +141,26 @@ static bool scan_word(Lexer *lexer, Token *token) {
 		"fn", "return", "let"
 	};
 	for (size_t i = 0; i < sizeof(keywords) / sizeof(keywords[0]); ++i) {
-		unsigned long length = (unsigned long)(lexer->cursor - begin);
+		unsigned long length = (unsigned long)(cursor - begin);
 		bool match = (length == strlen(keywords[i]));
 		match = match && !strncmp(begin, keywords[i], length);
 		is_keyword = is_keyword || match;
 	}
 
 	token->type = is_keyword ? TOKEN_KEYWORD : TOKEN_IDENTIFIER;
-	token->value = lexer->memory->strndup(begin, lexer->cursor - begin);
+	token->value = memory->strndup(begin, cursor - begin);
 
 	return true;
 }
 
-static bool scan_number(Lexer *lexer, Token *token) {
-	const char *begin = lexer->cursor;
+bool Lexer::scan_number(PToken *token) {
+	const char *begin = cursor;
 
 	// Non-decimal radix prefixes
 	if (begin[0] == '0' && is_radix_prefix(begin[1])) {
-		lexer->cursor++;
+		cursor++;
 		int (*validate)(int) = NULL;
-		switch (tolower(*lexer->cursor++)) {
+		switch (tolower(*cursor++)) {
 			case 'x':
 				validate = isxdigit;
 				break;
@@ -170,48 +175,48 @@ static bool scan_number(Lexer *lexer, Token *token) {
 				break;
 		}
 
-		while (validate(lexer->cursor[0]))
-			lexer->cursor++;
+		while (validate(cursor[0]))
+			cursor++;
 
-		if (lexer->cursor - begin <= 2) {
-			lexer_error(lexer, "expected digits after radix prefix");
+		if (cursor - begin <= 2) {
+			set_error("expected digits after radix prefix");
 			return false;
 		}
 
 		token->type = TOKEN_INT;
-		token->value = lexer->memory->strndup(begin, lexer->cursor - begin);
+		token->value = memory->strndup(begin, cursor - begin);
 
 		return true;
 	} else {
 		bool isFloat = false;
-		while (isdigit(lexer->cursor[0]))
-			lexer->cursor++;
+		while (isdigit(cursor[0]))
+			cursor++;
 
-		if (lexer->cursor[0] == '.') {
+		if (cursor[0] == '.') {
 			isFloat = true;
-			lexer->cursor++;
-			while (isdigit(lexer->cursor[0]))
-				lexer->cursor++;
+			cursor++;
+			while (isdigit(cursor[0]))
+				cursor++;
 		}
 
-		if (tolower(lexer->cursor[0]) == 'e') {
+		if (tolower(cursor[0]) == 'e') {
 			isFloat = true;
-			lexer->cursor++;
+			cursor++;
 
-			if (lexer->cursor[0] == '+' || lexer->cursor[0] == '-')
-				lexer->cursor++;
+			if (cursor[0] == '+' || cursor[0] == '-')
+				cursor++;
 
-			if (!isdigit(lexer->cursor[0])) {
-				lexer_error(lexer, "missing floating point exponent");
+			if (!isdigit(cursor[0])) {
+				set_error("missing floating point exponent");
 				return false;
 			}
 
-			while (isdigit(lexer->cursor[0]))
-				lexer->cursor++;
+			while (isdigit(cursor[0]))
+				cursor++;
 		}
 
 		token->type = isFloat ? TOKEN_FLOAT : TOKEN_INT;
-		token->value = lexer->memory->strndup(begin, lexer->cursor - begin);
+		token->value = memory->strndup(begin, cursor - begin);
 		
 		return true;
 	}
@@ -219,8 +224,8 @@ static bool scan_number(Lexer *lexer, Token *token) {
 	return false;
 }
 
-static bool validate_escape_sequence(Lexer *lexer) {
-	switch(*++lexer->cursor) {
+bool Lexer::validate_escape_sequence() {
+	switch(*++cursor) {
 		case '\\':
 		case '/':
 		case '\'':
@@ -231,114 +236,111 @@ static bool validate_escape_sequence(Lexer *lexer) {
 		case 'n':
 		case 'r':
 		case 't':
-			lexer->cursor++;
+			cursor++;
 			return true;
 		case 'x': {
-			lexer->cursor++;
-			if (isxdigit(lexer->cursor[0]) && isxdigit(lexer->cursor[1])) {
-				lexer->cursor += 2;
+			cursor++;
+			if (isxdigit(cursor[0]) && isxdigit(cursor[1])) {
+				cursor += 2;
 				return true;
 			} else {
-				lexer_error(lexer, "invalid hex escape sequence: '\\x%c%c\n",
-				              lexer->cursor[0], lexer->cursor[1]);
+				set_error("invalid hex escape sequence: '\\x%c%c\n",
+				              cursor[0], cursor[1]);
 				return false;
 			}
 		}
 	}
 
-	lexer_error(lexer, "invalid escape sequence: '\\%c'", lexer->cursor[0]);
+	set_error("invalid escape sequence: '\\%c'", cursor[0]);
 	return false;
 }
 
-static bool scan_string(Lexer *lexer, Token *token) {
-	const char *begin = lexer->cursor++;
+bool Lexer::scan_string(PToken *token) {
+	const char *begin = cursor++;
 
-	while (lexer->cursor[0] != '"') {
-		if (!lexer->cursor[0]) {
-			lexer_error(lexer, "unterminated string");
+	while (cursor[0] != '"') {
+		if (!cursor[0]) {
+			set_error("unterminated string");
 			return false;
-		} else if (lexer->cursor[0] == '\n' || lexer->cursor[0] == '\r') {
-			lexer_error(lexer, "unexpected newline in string");
+		} else if (cursor[0] == '\n' || cursor[0] == '\r') {
+			set_error("unexpected newline in string");
 			return false;
-		} else if (lexer->cursor[0] == '\\') {
-			if (!validate_escape_sequence(lexer))
+		} else if (cursor[0] == '\\') {
+			if (!validate_escape_sequence())
 				return false;
 		} else {
-			lexer->cursor++;
+			cursor++;
 		}
 	}
-	lexer->cursor++;
+	cursor++;
 
 	token->type = TOKEN_STRING;
-	token->value = lexer->memory->strndup(begin, lexer->cursor - begin);
+	token->value = memory->strndup(begin, cursor - begin);
 
 	return true;
 }
 
-static bool next_token(Lexer *lexer, Token *token) {
+bool Lexer::next_token(PToken *token) {
 	// Skip whitespace and comments
-	while (peek_whitespace(lexer) || peek_comment(lexer)) {
-		skip_whitespace(lexer);
-		skip_comments(lexer);
+	while (peek_whitespace() || peek_comment()) {
+		skip_whitespace();
+		skip_comments();
 	}
 
-	token->line_no = lexer->line_no;
-	token->col_no = lexer->cursor - lexer->line_offset + 1;
-	token->offset = lexer->cursor - lexer->source;
+	token->line_no = line_no;
+	token->col_no = cursor - line_offset + 1;
+	token->offset = cursor - source;
 
-	if (lexer->cursor[0] == '"')
-		return scan_string(lexer, token);
-	if (peek_reserved_punctuation(lexer))
-		return scan_reserved_punctuation(lexer, token);
-	if (ispunct(lexer->cursor[0]))
-		return scan_punctuation(lexer, token);
-	if (lexer->cursor[0] == '_' || isalpha(lexer->cursor[0]))
-		return scan_word(lexer, token);
-	if (isdigit(lexer->cursor[0]))
-		return scan_number(lexer, token);
+	if (cursor[0] == '"')
+		return scan_string(token);
+	if (peek_reserved_punctuation())
+		return scan_reserved_punctuation(token);
+	if (ispunct(cursor[0]))
+		return scan_punctuation(token);
+	if (cursor[0] == '_' || isalpha(cursor[0]))
+		return scan_word(token);
+	if (isdigit(cursor[0]))
+		return scan_number(token);
 
-	if (lexer->cursor[0] == 0) {
-		lexer->eof = true;
+	if (cursor[0] == 0) {
+		eof = true;
 		return 0;
 	}
 
-	lexer_error(lexer, "unexpected character '%c'\n", lexer->cursor[0]);
+	set_error("unexpected character '%c'\n", cursor[0]);
 	return 0;
 }
 
 // TODO: Introduce some form of read-buffering so large files
 // don't have to occupy memory all at once [switch between two page read?]
-// NOTE: Although, we have to store the whole program in memory for the
-// token stream anyway so it only prevents the double memory load (which is
-// good, but not quite what I had hoped)
-Token *lex(Lexer *lexer, size_t *count) {
+PToken *Lexer::lex(size_t *count) {
 	// Lexer initialization
-	lexer->cursor = lexer->source;
-	lexer->line_offset = lexer->source;
-	lexer->line_no = 1;
-	lexer->eof = false;
-	lexer->error = NULL;
+	cursor = source;
+	line_offset = source;
+	line_no = 1;
+	eof = false;
+	error = NULL;
 
 	size_t token_chunk_size = 256;
 	size_t token_count = 0;
-	Token *tokens = (Token *)heap_alloc(token_chunk_size * sizeof(tokens[0]));
+	PToken *tokens = (PToken *)heap_alloc(token_chunk_size * sizeof(tokens[0]));
 
-	while (next_token(lexer, &tokens[token_count])) {
+	while (next_token(&tokens[token_count])) {
 		++token_count;
 		if (token_count + 1 == token_chunk_size) {
 			token_chunk_size *= 2;
 
-			Token *oldTokens = tokens;
-			tokens = (Token *)heap_alloc(token_chunk_size * sizeof(tokens[0]));
-			memcpy(tokens, oldTokens, token_count * sizeof(tokens[0]));
-			free(oldTokens);
+			PToken *oldPTokens = tokens;
+			tokens = (PToken *)heap_alloc(token_chunk_size * sizeof(tokens[0]));
+			memcpy(tokens, oldPTokens, token_count * sizeof(tokens[0]));
+			free(oldPTokens);
 		}
 	}
 
 	// If we haven't matched a token but haven't finished lexing
 	// all the input, an error must have occured.
-	if (!lexer->eof) {
-		lexer->memory->free();
+	if (!eof) {
+		memory->free();
 		free(tokens);
 		*count = 0;
 		return NULL;

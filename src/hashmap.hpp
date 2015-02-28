@@ -6,14 +6,13 @@
 
 #include "helpers.h"
 
-// Interface
 template <typename T>
 struct HashNode {
 	char key[128];
 	T value;
 };
 
-// NOTE: Optimised for insertions and lookups, not for deletions.
+// Optimised for insertions and lookups, not for deletions.
 template <typename T>
 struct HashMap {
 	size_t size;
@@ -33,6 +32,7 @@ static unsigned int hash(const char *string) {
 	if (!string)
 		return 0;
 	unsigned int hash = 0;
+	// TODO: Improve hashing algorithm?
 	while (*string)
 		hash = (hash * 101) + *string++;
 	return hash;
@@ -61,10 +61,8 @@ bool HashMap<T>::resize(size_t new_size) {
 	size_t old_size = size;
 	size = new_size;
 	buckets = (HashNode<T> *)heap_alloc(sizeof(buckets[0]) * new_size);
-	// NOTE: Cannot use a raw memcpy here as the hash wrap around the 'size' breaks
-	// memcpy(buckets, old_buckets, sizeof(buckets[0]) * old_size);
-	// Instead, for now at least, we just re-add all the hash nodes (under the new 'size')
-	// [Beware: O(n) time complexity]
+	// NOTE: Wrapping around 'size' means we have to re-add all the hash nodes
+	// under the new hash table size - O(n).
 	for (size_t i = 0; i < old_size; ++i) {
 		if (old_buckets[i].key[0] != '\0')
 			buckets[hash(old_buckets[i].key) % size] = old_buckets[i];

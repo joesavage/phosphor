@@ -31,17 +31,17 @@ enum ASTNodeType {
 	NODE_CONSTANT_STRING
 };
 
-#define DECL_ASTNODE_DATA(node, utype, name) struct ASTNode::data::utype &name = node->data.utype;
+#define DECL_ASTNODE_DATA(node, utype, name) \
+struct ASTNode::data::utype &name = node->data.utype
 
-// TOTHINK: Union memory bugs can be tough to detect. Plus, having to re-specify
-// the 'type' of an ASTNode everywhere ('node->type.whatever') is annoying.
-// Inheritance would be nice. I may have made a poor architecture decision.
+// Tagged unions are 'Ugh.' to work with but have significant enough performance
+// gains over dynamic dispatch that I'm just going to run with it.
 struct ASTNode {
 	ASTNodeType type;
 	union data {
 		struct real {
 			double value;
-		} real; // NOTE: Currently unused
+		} real;
 		struct integer {
 			size_t value;
 		} integer;
@@ -77,7 +77,7 @@ struct ASTNode {
 			ASTNode *body;
 		} function;
 		struct function_signature {
-			ASTNode *name; // TODO:/TOTHINK: Unnecessary indirection
+			ASTNode *name; // TODO: Think about this unnecessary indirection.
 			ASTNode *type;
 			MemoryList<ASTNode *> args;
 			Environment *env;

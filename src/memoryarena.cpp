@@ -49,7 +49,8 @@ char *MemoryArena::reserve(size_t length) {
 
 	char *destination;
 	if (!(destination = chunks.getPointer(chunk_cursor)->reserve(length))) {
-		chunk_cursor = chunks.add(MemoryArenaChunk(length > chunk_init_size ? length : chunk_init_size));
+		size_t new_chunk_size = length > chunk_init_size ? length : chunk_init_size;
+		chunk_cursor = chunks.add(MemoryArenaChunk(new_chunk_size));
 		destination = chunks.getPointer(chunk_cursor)->reserve(length);
 	}
 

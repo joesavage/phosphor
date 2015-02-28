@@ -5,7 +5,7 @@
 
 #include "memoryarena.h"
 
-enum TokenType {
+enum PTokenType {
 	TOKEN_UNINITIALIZED,
 	TOKEN_RESERVED_PUNCTUATION,
 	TOKEN_OPERATOR,
@@ -18,7 +18,7 @@ enum TokenType {
 
 #define MINIMUM_PRECEDENCE 1
 
-struct Operator {
+struct POperator {
 	char key[128];
 	enum OperatorType {
 		BINARY,
@@ -31,7 +31,7 @@ struct Operator {
 	} associativity;
 	unsigned char precedence;
 
-	Operator(OperatorType type = BINARY,
+	POperator(OperatorType type = BINARY,
 		OperatorAssociativity associativity = LEFT_ASSOC,
 		unsigned char precedence = 1)
 	{
@@ -41,8 +41,8 @@ struct Operator {
 	}
 };
 
-struct Token {
-	TokenType type;
+struct PToken {
+	PTokenType type;
 	size_t offset;
 	char *value;
 
@@ -57,11 +57,23 @@ struct Lexer {
 	unsigned int line_no;
 	bool eof;
 	char *error;
-
 	MemoryArena *memory;
-};
 
-// Function signatures
-Token *lex(Lexer *lexer, size_t *count);
+	PToken *lex(size_t *count);
+private:
+	void set_error(const char *format, ...);
+	bool peek_whitespace();
+	bool peek_comment();
+	bool peek_reserved_punctuation();
+	void skip_whitespace();
+	void skip_comments();
+	bool scan_reserved_punctuation(PToken *token);
+	bool scan_punctuation(PToken *token);
+	bool scan_word(PToken *token);
+	bool scan_number(PToken *token);
+	bool validate_escape_sequence();
+	bool scan_string(PToken *token);
+	bool next_token(PToken *token);
+};
 
 #endif

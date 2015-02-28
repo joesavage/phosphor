@@ -28,7 +28,6 @@ static char *read_file(char *path) {
 }
 
 static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
-	
 	if (node != NULL) {
 		for (size_t i = 0; i < depth; ++i)
 			printf("   ");
@@ -38,7 +37,7 @@ static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 			case NODE_STATEMENTS:
 			case NODE_BLOCK:
 			{
-				DECL_ASTNODE_DATA(node, block, pdata)
+				DECL_ASTNODE_DATA(node, block, pdata);
 				printf("BLOCK\n");
 				printf_ast(pdata.left, "LEFT", depth + 1);
 				printf_ast(pdata.right, "RIGHT", depth + 1);
@@ -46,7 +45,7 @@ static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 			}
 			case NODE_VARIABLE_DECLARATION:
 			{
-				DECL_ASTNODE_DATA(node, variable_declaration, pdata)
+				DECL_ASTNODE_DATA(node, variable_declaration, pdata);
 				printf("VARDECL\n");
 				printf_ast(pdata.type, "TYPE", depth + 1);
 				printf_ast(pdata.name, "NAME", depth + 1);
@@ -55,14 +54,14 @@ static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 			}
 			case NODE_UNARY_OPERATOR:
 			{
-				DECL_ASTNODE_DATA(node, unary_operator, pdata)
+				DECL_ASTNODE_DATA(node, unary_operator, pdata);
 				printf("UNARY_OP<%s>\n", pdata.value);
 				printf_ast(pdata.operand, "OPERAND", depth + 1);
 				break;
 			}
 			case NODE_BINARY_OPERATOR:
 			{
-				DECL_ASTNODE_DATA(node, binary_operator, pdata)
+				DECL_ASTNODE_DATA(node, binary_operator, pdata);
 				printf("BINARY_OP<%s>\n", pdata.value);
 				printf_ast(pdata.left, "LEFT", depth + 1);
 				printf_ast(pdata.right, "RIGHT", depth + 1);
@@ -84,7 +83,7 @@ static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 			}
 			case NODE_FUNCTION:
 			{
-				DECL_ASTNODE_DATA(node, function, pdata)
+				DECL_ASTNODE_DATA(node, function, pdata);
 				printf("FUNCTION\n");
 				printf_ast(pdata.signature, "SIG", depth + 1);
 				printf_ast(pdata.body, "BODY", depth + 1);
@@ -92,7 +91,7 @@ static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 			}
 			case NODE_FUNCTION_SIGNATURE:
 			{
-				DECL_ASTNODE_DATA(node, function_signature, pdata)
+				DECL_ASTNODE_DATA(node, function_signature, pdata);
 				printf("FUNCTION_SIG\n");
 				printf_ast(pdata.name, "NAME", depth + 1);
 				printf_ast(pdata.type, "TYPE", depth + 1);
@@ -102,7 +101,7 @@ static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 			}
 			case NODE_FUNCTION_CALL:
 			{
-				DECL_ASTNODE_DATA(node, function_call, pdata)
+				DECL_ASTNODE_DATA(node, function_call, pdata);
 				printf("FUNCTION_CALL\n");
 				printf_ast(pdata.name, "NAME", depth + 1);
 				for (size_t i = 0; i < pdata.args.size(); ++i)
@@ -143,45 +142,45 @@ int main() {
 	lexer.memory = &transient_memory;
 	parser.memory = &transient_memory;
 
-	HashMap<Operator> &unary_operators = parser.unary_operators;
+	HashMap<POperator> &unary_operators = parser.unary_operators;
 	unary_operators.size = 16;
-	unary_operators.set("+",  Operator(Operator::UNARY, Operator::IMPLICIT_ASSOC, 1));
-	unary_operators.set("-",  Operator(Operator::UNARY, Operator::IMPLICIT_ASSOC, 1));
-	unary_operators.set("!",  Operator(Operator::UNARY, Operator::IMPLICIT_ASSOC, 2));
-	unary_operators.set("++", Operator(Operator::UNARY, Operator::IMPLICIT_ASSOC, 2));
-	unary_operators.set("--", Operator(Operator::UNARY, Operator::IMPLICIT_ASSOC, 2));
+	unary_operators.set("+",  POperator(POperator::UNARY, POperator::IMPLICIT_ASSOC, 1));
+	unary_operators.set("-",  POperator(POperator::UNARY, POperator::IMPLICIT_ASSOC, 1));
+	unary_operators.set("!",  POperator(POperator::UNARY, POperator::IMPLICIT_ASSOC, 2));
+	unary_operators.set("++", POperator(POperator::UNARY, POperator::IMPLICIT_ASSOC, 2));
+	unary_operators.set("--", POperator(POperator::UNARY, POperator::IMPLICIT_ASSOC, 2));
 
-	HashMap<Operator> &binary_operators = parser.binary_operators;
+	HashMap<POperator> &binary_operators = parser.binary_operators;
 	binary_operators.size = 64;
-	binary_operators.set("*",   Operator(Operator::BINARY, Operator::LEFT_ASSOC, 10));
-	binary_operators.set("/",   Operator(Operator::BINARY, Operator::LEFT_ASSOC, 10));
-	binary_operators.set("+",   Operator(Operator::BINARY, Operator::LEFT_ASSOC,  9));
-	binary_operators.set("-",   Operator(Operator::BINARY, Operator::LEFT_ASSOC,  9));
-	binary_operators.set("%",   Operator(Operator::BINARY, Operator::LEFT_ASSOC,  9));
-	binary_operators.set("<<",  Operator(Operator::BINARY, Operator::LEFT_ASSOC,  8));
-	binary_operators.set(">>",  Operator(Operator::BINARY, Operator::LEFT_ASSOC,  8));
-	binary_operators.set("<",   Operator(Operator::BINARY, Operator::LEFT_ASSOC,  7));
-	binary_operators.set("<=",  Operator(Operator::BINARY, Operator::LEFT_ASSOC,  7));
-	binary_operators.set(">",   Operator(Operator::BINARY, Operator::LEFT_ASSOC,  7));
-	binary_operators.set(">=",  Operator(Operator::BINARY, Operator::LEFT_ASSOC,  7));
-	binary_operators.set("==",  Operator(Operator::BINARY, Operator::LEFT_ASSOC,  6));
-	binary_operators.set("!=",  Operator(Operator::BINARY, Operator::LEFT_ASSOC,  6));
-	binary_operators.set("&",   Operator(Operator::BINARY, Operator::LEFT_ASSOC,  5));
-	binary_operators.set("|",   Operator(Operator::BINARY, Operator::LEFT_ASSOC,  4));
-	binary_operators.set("&&",  Operator(Operator::BINARY, Operator::LEFT_ASSOC,  3));
-	binary_operators.set("||",  Operator(Operator::BINARY, Operator::LEFT_ASSOC,  2));
-	binary_operators.set("=",   Operator(Operator::BINARY, Operator::RIGHT_ASSOC, 1));
-	binary_operators.set("+=",  Operator(Operator::BINARY, Operator::RIGHT_ASSOC, 1));
-	binary_operators.set("-=",  Operator(Operator::BINARY, Operator::RIGHT_ASSOC, 1));
-	binary_operators.set("*=",  Operator(Operator::BINARY, Operator::RIGHT_ASSOC, 1));
-	binary_operators.set("/=",  Operator(Operator::BINARY, Operator::RIGHT_ASSOC, 1));
-	binary_operators.set("%=",  Operator(Operator::BINARY, Operator::RIGHT_ASSOC, 1));
-	binary_operators.set("&=",  Operator(Operator::BINARY, Operator::RIGHT_ASSOC, 1));
-	binary_operators.set("|=",  Operator(Operator::BINARY, Operator::RIGHT_ASSOC, 1));
-	binary_operators.set("&&=", Operator(Operator::BINARY, Operator::RIGHT_ASSOC, 1));
-	binary_operators.set("||=", Operator(Operator::BINARY, Operator::RIGHT_ASSOC, 1));
-	binary_operators.set("<<=", Operator(Operator::BINARY, Operator::RIGHT_ASSOC, 1));
-	binary_operators.set(">>=", Operator(Operator::BINARY, Operator::RIGHT_ASSOC, 1));
+	binary_operators.set("*",   POperator(POperator::BINARY, POperator::LEFT_ASSOC, 10));
+	binary_operators.set("/",   POperator(POperator::BINARY, POperator::LEFT_ASSOC, 10));
+	binary_operators.set("+",   POperator(POperator::BINARY, POperator::LEFT_ASSOC,  9));
+	binary_operators.set("-",   POperator(POperator::BINARY, POperator::LEFT_ASSOC,  9));
+	binary_operators.set("%",   POperator(POperator::BINARY, POperator::LEFT_ASSOC,  9));
+	binary_operators.set("<<",  POperator(POperator::BINARY, POperator::LEFT_ASSOC,  8));
+	binary_operators.set(">>",  POperator(POperator::BINARY, POperator::LEFT_ASSOC,  8));
+	binary_operators.set("<",   POperator(POperator::BINARY, POperator::LEFT_ASSOC,  7));
+	binary_operators.set("<=",  POperator(POperator::BINARY, POperator::LEFT_ASSOC,  7));
+	binary_operators.set(">",   POperator(POperator::BINARY, POperator::LEFT_ASSOC,  7));
+	binary_operators.set(">=",  POperator(POperator::BINARY, POperator::LEFT_ASSOC,  7));
+	binary_operators.set("==",  POperator(POperator::BINARY, POperator::LEFT_ASSOC,  6));
+	binary_operators.set("!=",  POperator(POperator::BINARY, POperator::LEFT_ASSOC,  6));
+	binary_operators.set("&",   POperator(POperator::BINARY, POperator::LEFT_ASSOC,  5));
+	binary_operators.set("|",   POperator(POperator::BINARY, POperator::LEFT_ASSOC,  4));
+	binary_operators.set("&&",  POperator(POperator::BINARY, POperator::LEFT_ASSOC,  3));
+	binary_operators.set("||",  POperator(POperator::BINARY, POperator::LEFT_ASSOC,  2));
+	binary_operators.set("=",   POperator(POperator::BINARY, POperator::RIGHT_ASSOC, 1));
+	binary_operators.set("+=",  POperator(POperator::BINARY, POperator::RIGHT_ASSOC, 1));
+	binary_operators.set("-=",  POperator(POperator::BINARY, POperator::RIGHT_ASSOC, 1));
+	binary_operators.set("*=",  POperator(POperator::BINARY, POperator::RIGHT_ASSOC, 1));
+	binary_operators.set("/=",  POperator(POperator::BINARY, POperator::RIGHT_ASSOC, 1));
+	binary_operators.set("%=",  POperator(POperator::BINARY, POperator::RIGHT_ASSOC, 1));
+	binary_operators.set("&=",  POperator(POperator::BINARY, POperator::RIGHT_ASSOC, 1));
+	binary_operators.set("|=",  POperator(POperator::BINARY, POperator::RIGHT_ASSOC, 1));
+	binary_operators.set("&&=", POperator(POperator::BINARY, POperator::RIGHT_ASSOC, 1));
+	binary_operators.set("||=", POperator(POperator::BINARY, POperator::RIGHT_ASSOC, 1));
+	binary_operators.set("<<=", POperator(POperator::BINARY, POperator::RIGHT_ASSOC, 1));
+	binary_operators.set(">>=", POperator(POperator::BINARY, POperator::RIGHT_ASSOC, 1));
 
 	parser.env = (Environment *)parser.memory->reserve(sizeof(Environment));
 	*parser.env = Environment();
@@ -213,7 +212,7 @@ int main() {
 	lexer.source = read_file("test.ph");
 
 	// Lexing
-	parser.tokens = lex(&lexer, &parser.token_count);
+	parser.tokens = lexer.lex(&parser.token_count);
 	free((void *)lexer.source);
 	if (lexer.error) {
 		// lexer.strings.free();
@@ -230,7 +229,7 @@ int main() {
 
 	// Parsing
 	parser.memory = lexer.memory;
-	generator.root = parse(&parser);
+	generator.root = parser.parse();
 	free(parser.tokens);
 	if (parser.error) {
 		// parser.strings.free();
@@ -248,7 +247,7 @@ int main() {
 	 // Code Generation
 	printf("\nLLVM IR: \n");
 	generator.env = parser.env;
-	codegen(&generator);
+	generator.generate();
 	if (generator.error)
 		fatal_error("Code generation failed with error: %s\n", generator.error);
 
