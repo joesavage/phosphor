@@ -218,6 +218,7 @@ ASTNode *Parser::parse_atom() {
 
 	if ((term = parse_constant()))
 		return result;
+
 	if (scan_token(TOKEN_RESERVED_PUNCTUATION, "(")
 	    && (term = parse_expression())
 	    && scan_token(TOKEN_RESERVED_PUNCTUATION, ")"))
@@ -231,7 +232,7 @@ ASTNode *Parser::parse_atom() {
 // Parse expressions via precedence climbing
 ASTNode *Parser::parse_expression(unsigned char minimum_precedence) {
 	ASTNode *result = parse_atom();
-	if (!result)
+	if (!result || error)
 		return NULL;
 
 	// TODO: Ternary operators and square bracket operators need to be handled
@@ -309,8 +310,7 @@ ASTNode *Parser::parse_block() {
 	Environment *prev_env = env;
 	env = result->data.block.env;
 	result->data.block.left = parse_statements();
-
-	if (error) // TODO: Having to do this everywhere is annoying.
+	if (!result->data.block.left || error)
 		return NULL;
 
 	if (!scan_token(TOKEN_RESERVED_PUNCTUATION, "}")) {
@@ -352,7 +352,7 @@ ASTNode *Parser::parse_function() {
 		if (!scan_token(TOKEN_RESERVED_PUNCTUATION, ","))
 			break;
 	}
-	error = NULL;
+	error = NULL; // TODO: We only want to ignore some errors.
 
 	if (!scan_token(TOKEN_RESERVED_PUNCTUATION, ")")) {
 		set_error("expected closing bracket in function signature");
@@ -373,7 +373,11 @@ ASTNode *Parser::parse_function() {
 		ASTNode *function = (ASTNode *)nodes.reserve(sizeof(ASTNode));
 		initialise_node(function, NODE_FUNCTION);
 		function->data.function.signature = signature;
+		if (!function->data.function.signature || error)
+			return NULL;
 		function->data.function.body = parse_block();
+		if (!function->data.function.body || error)
+			return NULL;
 		env = prev_env;
 		return function;
 	}
@@ -391,13 +395,20 @@ ASTNode *Parser::parse_if() {
 	ASTNode *result = (ASTNode *)nodes.reserve(sizeof(ASTNode));
 	initialise_node(result, NODE_IF);
 	result->data.conditional.condition = parse_expression();
+	if (!result->data.conditional.condition || error)
+		return NULL;
 	result->data.conditional.then = parse_block();
+	if (!result->data.conditional.then || error)
+		return NULL;
 
 	if (scan_token(TOKEN_KEYWORD, "else")) {
 		if (peek_token(TOKEN_KEYWORD, "if"))
 			result->data.conditional.other = parse_if();
 		else
 			result->data.conditional.other = parse_block();
+
+		if (!result->data.conditional.other || error)
+			return NULL;
 	}
 
 	return result;
@@ -412,10 +423,17 @@ ASTNode *Parser::parse_while() {
 	ASTNode *result = (ASTNode *)nodes.reserve(sizeof(ASTNode));
 	initialise_node(result, NODE_WHILE_LOOP);
 	result->data.conditional.condition = parse_expression();
+	if (!result->data.conditional.condition || error)
+		return NULL;
 	result->data.conditional.then = parse_block();
+	if (!result->data.conditional.then || error)
+		return NULL;
 
-	if (scan_token(TOKEN_KEYWORD, "else"))
+	if (scan_token(TOKEN_KEYWORD, "else")) {
 		result->data.conditional.other = parse_block();
+		if (!result->data.conditional.other || error)
+			return NULL;
+	}
 
 	return result;
 }
@@ -429,6 +447,8 @@ ASTNode *Parser::parse_return() {
 	ASTNode *result = (ASTNode *)nodes.reserve(sizeof(ASTNode));
 	initialise_node(result, NODE_RETURN);
 	result->data.unary_operator.operand = parse_expression();
+	if (!result->data.unary_operator.operand || error)
+		return NULL;
 
 	return result;
 }

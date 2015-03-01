@@ -10,7 +10,7 @@
 
 // NOTE: We should probably do the decoding of values (e.g. numbers) here
 
-// NOTE: The errors (and error flow) in here need improving.
+// NOTE: The errors in here need improving.
 
 static int isoctal(int ch) {
 	return '0' <= ch && ch <= '7';
@@ -188,19 +188,19 @@ bool Lexer::scan_number(PToken *token) {
 
 		return true;
 	} else {
-		bool isFloat = false;
+		bool is_float = false;
 		while (isdigit(cursor[0]))
 			cursor++;
 
 		if (cursor[0] == '.') {
-			isFloat = true;
+			is_float = true;
 			cursor++;
 			while (isdigit(cursor[0]))
 				cursor++;
 		}
 
 		if (tolower(cursor[0]) == 'e') {
-			isFloat = true;
+			is_float = true;
 			cursor++;
 
 			if (cursor[0] == '+' || cursor[0] == '-')
@@ -215,7 +215,7 @@ bool Lexer::scan_number(PToken *token) {
 				cursor++;
 		}
 
-		token->type = isFloat ? TOKEN_FLOAT : TOKEN_INT;
+		token->type = is_float ? TOKEN_FLOAT : TOKEN_INT;
 		token->value = memory->strndup(begin, cursor - begin);
 		
 		return true;
@@ -245,7 +245,7 @@ bool Lexer::validate_escape_sequence() {
 				return true;
 			} else {
 				set_error("invalid hex escape sequence: '\\x%c%c\n",
-				              cursor[0], cursor[1]);
+				          cursor[0], cursor[1]);
 				return false;
 			}
 		}
@@ -287,6 +287,9 @@ bool Lexer::next_token(PToken *token) {
 		skip_comments();
 	}
 
+	if (error)
+		return false;
+
 	token->line_no = line_no;
 	token->col_no = cursor - line_offset + 1;
 	token->offset = cursor - source;
@@ -304,11 +307,11 @@ bool Lexer::next_token(PToken *token) {
 
 	if (cursor[0] == 0) {
 		eof = true;
-		return 0;
+		return false;
 	}
 
 	set_error("unexpected character '%c'\n", cursor[0]);
-	return 0;
+	return false;
 }
 
 // TODO: Introduce some form of read-buffering so large files

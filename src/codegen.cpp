@@ -10,8 +10,7 @@
 
 using namespace llvm;
 
-// TODO: This needs proper error and type handling just EVERYWHERE right now.
-//       (the way errors bubble through the system needs better handling also)
+// TODO: The quality of errors in here needs improving. Inc. line & col no!
 
 // TODO: At some point, we need to focus on quality of the LLVM IR generated.
 //       [COMPARE TO: $ clang -S -emit-llvm foo.c]
@@ -61,8 +60,11 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 			if (!strcmp(pnode.value, "=")) {
 				DECL_ASTNODE_DATA(pnode.left, string, symbol_name);
 				PValue *var_sym = lookup_symbol(symbol_name.value);
+				if (!var_sym) {
+					set_error("invalid symbol name for assignment");
+					break;
+				}
 				PValue value = generate_expression(pnode.right);
-
 				if (error)
 					break;
 
@@ -82,7 +84,11 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 
 
 			PValue left = generate_expression(pnode.left);
+			if (error)
+				break;
 			PValue right = generate_expression(pnode.right);
+			if (error)
+				break;
 
 			if (lookup_type(left) != lookup_type(right)) {
 				set_error("type mismatch in addition operation!");
@@ -135,13 +141,14 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 			MemoryList<Value *> args(args_count);
 			for (size_t i = 0; i < args_count; ++i) {
 				PValue arg = generate_expression(pnode.args[i]);
+				if (error)
+					break;
 				args.add(arg.value);
 				if (lookup_type(arg.type) != lookup_type(pfunction.arg_types[i])) {
 					set_error("function parameter mis-match at param %d", i);
 					break;
 				}
 			}
-
 			if (error)
 				break;
 
@@ -194,8 +201,10 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 		{
 			DECL_ASTNODE_DATA(node, string, pnode);
 			PValue *value = lookup_symbol(pnode.value);
-			if (!value)
+			if (!value) {
 				set_error("failed to find symbol '%s'", pnode.value);
+				break;
+			}
 			return *value;
 		}
 		default:
@@ -221,6 +230,8 @@ PFunction CodeGenerator::generate_function(ASTNode *node) {
 			for (size_t i = 0; i < args_count; ++i) {
 				DECL_ASTNODE_DATA(pnode.args[i], variable_declaration, arg);
 				generate_statement(pnode.args[i]);
+				if (error)
+					break;
 
 				char *type_name = arg.type->data.string.value;
 				result.arg_types.add(type_name);
@@ -228,6 +239,8 @@ PFunction CodeGenerator::generate_function(ASTNode *node) {
 				PType type = lookup_type(type_name);
 				args.add(type.type);
 			}
+			if (error)
+				break;
 
 			// TODO: Needle to handle redefinitions
 			char *function_name = pnode.name->data.string.value;
@@ -290,6 +303,8 @@ PFunction CodeGenerator::generate_function(ASTNode *node) {
 		{
 			DECL_ASTNODE_DATA(node, function, pnode);
 			PFunction function = generate_function(pnode.signature);
+			if (error)
+				break;
 			BasicBlock *BB = BasicBlock::Create(getGlobalContext(), "entry",
 			                                    function.value);
 			builder->SetInsertPoint(BB);
@@ -298,6 +313,8 @@ PFunction CodeGenerator::generate_function(ASTNode *node) {
 			env = pnode.signature->data.function_signature.env;
 
 			generate_statement(pnode.body);
+			if (error)
+				break;
 
 			env = prev_env;
 
@@ -352,6 +369,8 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 		{
 			DECL_ASTNODE_DATA(node, conditional, pnode);
 			PValue cond = generate_expression(pnode.condition);
+			if (error)
+				break;
 			if (lookup_type(cond) != lookup_type("bool")) {
 				set_error("unsupported type for if statement condition");
 				break;
@@ -373,12 +392,17 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 
 			builder->SetInsertPoint(then);
 			generate_statement(pnode.then);
+			if (error)
+				break;
 			builder->CreateBr(merge);
 			then = builder->GetInsertBlock();
 
 			builder->SetInsertPoint(other);
-			if (pnode.other) // TODO: Rename 'other' (closer to 'else')
+			if (pnode.other) { // TODO: Rename 'other' (closer to 'else')
 				generate_statement(pnode.other);
+				if (error)
+					break;
+			}
 			builder->CreateBr(merge);
 			other = builder->GetInsertBlock();
 
@@ -403,6 +427,8 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 
 			builder->SetInsertPoint(preloop);
 			PValue cond = generate_expression(pnode.condition);
+			if (error)
+				break;
 
 			if (lookup_type(cond) != lookup_type("bool")) {
 				set_error("unsupported type for while statement condition");
@@ -419,8 +445,9 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 
 			builder->SetInsertPoint(loop);
 			generate_statement(pnode.then);
+			if (error)
+				break;
 			builder->CreateBr(preloop);
-
 			builder->SetInsertPoint(after);
 			break;
 		}
@@ -428,6 +455,8 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 		{
 			DECL_ASTNODE_DATA(node, unary_operator, pnode);
 			PValue val = generate_expression(pnode.operand);
+			if (error)
+				break;
 			// TODO: Type check
 			builder->CreateRet(val.value);
 			break;
@@ -457,6 +486,8 @@ void CodeGenerator::generate() {
 	// TODO: Add module metadata here?
 
 	generate_statement(root);
+	if (error)
+		return;
 	verifyModule(*module);
 
 	// TODO: Insert numerous code passes here (various optimisations, etc.)
