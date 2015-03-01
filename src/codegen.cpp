@@ -15,7 +15,7 @@ using namespace llvm;
 // TODO: At some point, we need to focus on quality of the LLVM IR generated.
 //       [COMPARE TO: $ clang -S -emit-llvm foo.c]
 
-void CodeGenerator::set_error(const char *format, ...) {
+void CodeGenerator::set_error(ASTNode *node, const char *format, ...) {
 	free(error);
 
 	char *buffer = (char *)heap_alloc(512);
@@ -25,6 +25,7 @@ void CodeGenerator::set_error(const char *format, ...) {
 	va_end(arglist);
 
 	error = buffer;
+	errnode = node;
 }
 
 PType CodeGenerator::lookup_type(PValue value) {
@@ -61,7 +62,7 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 				DECL_ASTNODE_DATA(pnode.left, string, symbol_name);
 				PValue *var_sym = lookup_symbol(symbol_name.value);
 				if (!var_sym) {
-					set_error("invalid symbol name for assignment");
+					set_error(pnode.left, "invalid symbol name for assignment");
 					break;
 				}
 				PValue value = generate_expression(pnode.right);
@@ -71,7 +72,7 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 				if (lookup_type(value) != lookup_type(*var_sym)) {
 					// TODO: Type conversions (factor out) - for integers, using Trunc or
 					// ZExt/SExt (getIntegerBitWidth).
-					set_error("type mismatch in assignment");
+					set_error(pnode.right, "type mismatch in assignment");
 					break;
 				}
 
@@ -91,13 +92,13 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 				break;
 
 			if (lookup_type(left) != lookup_type(right)) {
-				set_error("type mismatch in addition operation!");
+				set_error(pnode.right, "type mismatch in addition operation!");
 				break;
 			}
 
 			// Right now, we only have hardcoded support for (32-bit) integers.
 			if (lookup_type(left).type != IntegerType::get(getGlobalContext(), 32)) {
-				set_error("unsupported type for binary operation");
+				set_error(pnode.right, "unsupported type for binary operation");
 				break;
 			}
 
@@ -127,13 +128,15 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 			Function *function = module->getFunction(function_name);
 			PFunction pfunction = lookup_function(function_name);
 			if (!function || !pfunction.return_type) {
-				set_error("unknown function referenced '%s'", function_name);
+				set_error(pnode.name, "unknown function referenced '%s'",
+				          function_name);
 				break;
 			}
 
 			size_t args_count = pnode.args.size();
 			if (args_count != pfunction.arg_types.size()) {
-				set_error("function parameter number mismatch - expected %d, got %d",
+				set_error(node,
+				          "function parameter number mismatch - expected %d, got %d",
 				          pfunction.arg_types.size(), args_count);
 				break;
 			}
@@ -145,7 +148,7 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 					break;
 				args.add(arg.value);
 				if (lookup_type(arg.type) != lookup_type(pfunction.arg_types[i])) {
-					set_error("function parameter mis-match at param %d", i);
+					set_error(node, "function parameter mis-match at param %d", i);
 					break;
 				}
 			}
@@ -202,13 +205,13 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 			DECL_ASTNODE_DATA(node, string, pnode);
 			PValue *value = lookup_symbol(pnode.value);
 			if (!value) {
-				set_error("failed to find symbol '%s'", pnode.value);
+				set_error(node, "failed to find symbol '%s'", pnode.value);
 				break;
 			}
 			return *value;
 		}
 		default:
-			set_error("failed to generate expression for ASTNode");
+			set_error(node, "failed to generate expression for ASTNode");
 			break;
 	}
 
@@ -262,27 +265,29 @@ PFunction CodeGenerator::generate_function(ASTNode *node) {
 				function = module->getFunction(function_name);
 
 				if (!function->empty()) {
-					set_error("redefinition of function is not allowed");
+					set_error(node, "redefinition of function is not allowed");
 					break;
 				}
 
 				PFunction pfunction = lookup_function(function_name);
 				if (!pfunction.return_type) {
-					set_error("conflict between LLVM and function table state");
+					set_error(pnode.name,
+					          "conflict between LLVM and function table state");
 					break;
 				}
 
 				if (pfunction.arg_types.size() != result.arg_types.size()) {
-					set_error("redefinition of function with parameter number mismatch \
-					 - expected %d, got %d", pfunction.arg_types.size(), args_count);
+					set_error(node, "redefinition of function with parameter number \
+					          mismatch - expected %d, got %d", pfunction.arg_types.size(),
+					          args_count);
 					break;
 				}
 				for (size_t i = 0; i < pfunction.arg_types.size(); ++i) {
 					PType expected_type = lookup_type(pfunction.arg_types[i]);
 					PType actual_type = lookup_type(result.arg_types[i]);
 					if (actual_type != expected_type) {
-						set_error("redefinition of function with parameter mis-match \
-						 at param %d", i);
+						set_error(node, "redefinition of function with parameter mis-match \
+						          at param %d", i);
 						break;
 					}
 				}
@@ -322,7 +327,7 @@ PFunction CodeGenerator::generate_function(ASTNode *node) {
 			break;
 		}
 		default:
-			set_error("unexpected token for function code generation");
+			set_error(node, "unexpected token for function code generation");
 			break;
 	}
 
@@ -372,7 +377,8 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 			if (error)
 				break;
 			if (lookup_type(cond) != lookup_type("bool")) {
-				set_error("unsupported type for if statement condition");
+				set_error(pnode.condition,
+				          "unsupported type for if statement condition");
 				break;
 			}
 			// TODO: Factor 'ConstantInt' for 'true' so it can be easily reused.
@@ -431,7 +437,8 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 				break;
 
 			if (lookup_type(cond) != lookup_type("bool")) {
-				set_error("unsupported type for while statement condition");
+				set_error(pnode.condition,
+				          "unsupported type for while statement condition");
 				break;
 			}
 
@@ -466,14 +473,14 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 		case NODE_FOR_LOOP:
 		case NODE_BREAK:
 		case NODE_CONTINUE:
-			set_error("feature not yet implemented!");
+			set_error(node, "feature not yet implemented!");
 			break;
 		case NODE_CONSTANT_INT:
 		case NODE_CONSTANT_FLOAT:
 		case NODE_CONSTANT_STRING:
 			break;
 		default:
-			set_error("failed to generate statement for ASTNode");
+			set_error(node, "failed to generate statement for ASTNode");
 			break;
 	}
 }
@@ -482,6 +489,9 @@ void CodeGenerator::generate() {
 	IRBuilder<> builder = IRBuilder<>(getGlobalContext());
 	this->builder = &builder;
 	module = new Module("program", getGlobalContext());
+
+	error = NULL;
+	errnode = NULL;
 
 	// TODO: Add module metadata here?
 

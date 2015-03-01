@@ -65,29 +65,23 @@ PToken *Parser::scan_token(PTokenType type, const char *value) {
 ASTNode *Parser::parse_constant() {
 	ASTNode *result = NULL;
 
-	// TODO: Refactor/restructure?
 	PToken *token = NULL;
 	if ((token = scan_token_type(TOKEN_INT))) {
-		result = (ASTNode *)nodes.reserve(sizeof(ASTNode));
-		initialise_node(result, NODE_CONSTANT_INT);
+		result = create_node(NODE_CONSTANT_INT);
 		result->data.string.value = token->value;
 	} else if ((token = scan_token_type(TOKEN_FLOAT))) {
-		result = (ASTNode *)nodes.reserve(sizeof(ASTNode));
-		initialise_node(result, NODE_CONSTANT_FLOAT);
+		result = create_node(NODE_CONSTANT_FLOAT);
 		result->data.string.value = token->value;
 	} else if ((token = scan_token_type(TOKEN_STRING))) {
-		result = (ASTNode *)nodes.reserve(sizeof(ASTNode));
-		initialise_node(result, NODE_CONSTANT_STRING);
+		result = create_node(NODE_CONSTANT_STRING);
 		result->data.string.value = token->value;
 	} else if (peek_token(TOKEN_KEYWORD, "true")) {
 		++cursor;
-		result = (ASTNode *)nodes.reserve(sizeof(ASTNode));
-		initialise_node(result, NODE_CONSTANT_BOOL);
+		result = create_node(NODE_CONSTANT_BOOL);
 		result->data.integer.value = 1;
 	} else if (peek_token(TOKEN_KEYWORD, "false")) {
 		++cursor;
-		result = (ASTNode *)nodes.reserve(sizeof(ASTNode));
-		initialise_node(result, NODE_CONSTANT_BOOL);
+		result = create_node(NODE_CONSTANT_BOOL);
 		result->data.integer.value = 0;
 	}
 	
@@ -99,8 +93,7 @@ ASTNode *Parser::parse_identifier() {
 
 	PToken *identifier = scan_token_type(TOKEN_IDENTIFIER);
 	if (identifier) {
-		result = (ASTNode *)nodes.reserve(sizeof(ASTNode));
-		initialise_node(result, NODE_IDENTIFIER);
+		result = create_node(NODE_IDENTIFIER);
 		result->data.string.value = identifier->value;
 	}
 
@@ -114,8 +107,7 @@ ASTNode *Parser::parse_type() {
 
 	PType *ptype = search_for_type(*env, cursor->value);
 	if (ptype) {
-		result = (ASTNode *)nodes.reserve(sizeof(ASTNode));
-		initialise_node(result, NODE_TYPE);
+		result = create_node(NODE_TYPE);
 		result->data.string.value = cursor->value;
 		scan_token_type(TOKEN_IDENTIFIER);
 	}
@@ -138,13 +130,22 @@ bool Parser::peek_binary_operator() {
 	    && binary_operators[cursor[0].value];
 }
 
+ASTNode *Parser::create_node(ASTNodeType type) {
+	ASTNode *result = (ASTNode *)nodes.reserve(sizeof(ASTNode));
+	initialise_node(result, type);
+	if (!eof()) {
+		result->line_no = cursor->line_no;
+		result->col_no = cursor->col_no;
+	}
+	return result;
+}
+
 ASTNode *Parser::parse_unary_operator() {
 	ASTNode *result = NULL;
 
 	if (peek_unary_operator()) {
 		PToken *op = scan_token_type(TOKEN_OPERATOR);
-		result = (ASTNode *)nodes.reserve(sizeof(ASTNode));
-		initialise_node(result, NODE_UNARY_OPERATOR);
+		result = create_node(NODE_UNARY_OPERATOR);
 		result->data.string.value = op->value;
 	}
 
@@ -156,8 +157,7 @@ ASTNode *Parser::parse_binary_operator() {
 
 	if (peek_binary_operator()) {
 		PToken *op = scan_token_type(TOKEN_OPERATOR);
-		result = (ASTNode *)nodes.reserve(sizeof(ASTNode));
-		initialise_node(result, NODE_BINARY_OPERATOR);
+		result = create_node(NODE_BINARY_OPERATOR);
 		result->data.string.value = op->value;
 	}
 
@@ -191,8 +191,7 @@ ASTNode *Parser::parse_atom() {
 
 	if ((term = parse_identifier())) {
 		if (scan_token(TOKEN_RESERVED_PUNCTUATION, "(")) {
-			ASTNode *call = (ASTNode *)nodes.reserve(sizeof(ASTNode));
-			initialise_node(call, NODE_FUNCTION_CALL);
+			ASTNode *call = create_node(NODE_FUNCTION_CALL);
 
 			ASTNode *arg;
 			while ((arg = parse_expression())) {
@@ -277,8 +276,7 @@ ASTNode *Parser::parse_expression(unsigned char minimum_precedence) {
 }
 
 ASTNode *Parser::parse_variable_declaration() {
-	ASTNode *result = (ASTNode *)nodes.reserve(sizeof(ASTNode));
-	initialise_node(result, NODE_VARIABLE_DECLARATION);
+	ASTNode *result = create_node(NODE_VARIABLE_DECLARATION);
 
 	result->data.variable_declaration.type = parse_type();
 
@@ -303,8 +301,7 @@ ASTNode *Parser::parse_block() {
 		set_error("expected opening brace for block");
 		return NULL;
 	}
-	ASTNode *result = (ASTNode *)nodes.reserve(sizeof(ASTNode));
-	initialise_node(result, NODE_BLOCK);
+	ASTNode *result = create_node(NODE_BLOCK);
 	set_environment(result, env);
 
 	Environment *prev_env = env;
@@ -327,8 +324,7 @@ ASTNode *Parser::parse_function() {
 		return NULL;
 	}
 
-	ASTNode *signature = (ASTNode *)nodes.reserve(sizeof(ASTNode));
-	initialise_node(signature, NODE_FUNCTION_SIGNATURE);
+	ASTNode *signature = create_node(NODE_FUNCTION_SIGNATURE);
 	set_environment(signature, env);
 
 	ASTNode *identifier = parse_identifier();
@@ -370,8 +366,7 @@ ASTNode *Parser::parse_function() {
 		env = prev_env;
 		return signature;
 	} else {
-		ASTNode *function = (ASTNode *)nodes.reserve(sizeof(ASTNode));
-		initialise_node(function, NODE_FUNCTION);
+		ASTNode *function = create_node(NODE_FUNCTION);
 		function->data.function.signature = signature;
 		if (!function->data.function.signature || error)
 			return NULL;
@@ -392,8 +387,7 @@ ASTNode *Parser::parse_if() {
 		return NULL;
 	}
 
-	ASTNode *result = (ASTNode *)nodes.reserve(sizeof(ASTNode));
-	initialise_node(result, NODE_IF);
+	ASTNode *result = create_node(NODE_IF);
 	result->data.conditional.condition = parse_expression();
 	if (!result->data.conditional.condition || error)
 		return NULL;
@@ -420,8 +414,7 @@ ASTNode *Parser::parse_while() {
 		return NULL;
 	}
 
-	ASTNode *result = (ASTNode *)nodes.reserve(sizeof(ASTNode));
-	initialise_node(result, NODE_WHILE_LOOP);
+	ASTNode *result = create_node(NODE_WHILE_LOOP);
 	result->data.conditional.condition = parse_expression();
 	if (!result->data.conditional.condition || error)
 		return NULL;
@@ -444,8 +437,7 @@ ASTNode *Parser::parse_return() {
 		return NULL;
 	}
 
-	ASTNode *result = (ASTNode *)nodes.reserve(sizeof(ASTNode));
-	initialise_node(result, NODE_RETURN);
+	ASTNode *result = create_node(NODE_RETURN);
 	result->data.unary_operator.operand = parse_expression();
 	if (!result->data.unary_operator.operand || error)
 		return NULL;
@@ -482,10 +474,8 @@ ASTNode *Parser::parse_statements() {
 		if ((!(statement = parse_statement()) || error))
 			break;
 
-		if (!(*current)) {
-			*current = (ASTNode *)nodes.reserve(sizeof(ASTNode));
-			initialise_node(*current, NODE_STATEMENTS);
-		}
+		if (!(*current))
+			*current = create_node(NODE_STATEMENTS);
 		(*current)->data.block.left = statement;
 		(*current)->data.block.right = NULL;
 		current = &(*current)->data.block.right;

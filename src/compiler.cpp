@@ -184,22 +184,25 @@ int main() {
 
 	parser.env = (Environment *)parser.memory->reserve(sizeof(Environment));
 	*parser.env = Environment();
-	parser.env->symbol_table.size = 128;
-	parser.env->type_table.size = 64;
-	parser.env->function_table.size = 32;
+	HashMap<PType> &type_table = parser.env->type_table;
+	HashMap<PValue> &symbol_table = parser.env->symbol_table;
+	HashMap<PFunction> &function_table = parser.env->function_table;
+	symbol_table.size = 128;
+	type_table.size = 64;
+	function_table.size = 32;
 
-	parser.env->type_table.set("void", PType(Type::getVoidTy(getGlobalContext())));
-	parser.env->type_table.set("bool", PType(Type::getInt1Ty(getGlobalContext())));
-	parser.env->type_table.set("int8", PType(Type::getInt8Ty(getGlobalContext()), true));
-	parser.env->type_table.set("int16", PType(Type::getInt16Ty(getGlobalContext()), true));
-	parser.env->type_table.set("int32", PType(Type::getInt32Ty(getGlobalContext()), true));
-	parser.env->type_table.set("int64", PType(Type::getInt64Ty(getGlobalContext()), true));
-	parser.env->type_table.set("uint8", PType(Type::getInt8Ty(getGlobalContext()), false));
-	parser.env->type_table.set("uint16", PType(Type::getInt16Ty(getGlobalContext()), false));
-	parser.env->type_table.set("uint32", PType(Type::getInt32Ty(getGlobalContext()), false));
-	parser.env->type_table.set("uint64", PType(Type::getInt64Ty(getGlobalContext()), false));
-	parser.env->type_table.set("float32", PType(Type::getFloatTy(getGlobalContext())));
-	parser.env->type_table.set("float64", PType(Type::getDoubleTy(getGlobalContext())));
+	type_table.set("void", PType(Type::getVoidTy(getGlobalContext())));
+	type_table.set("bool", PType(Type::getInt1Ty(getGlobalContext())));
+	type_table.set("int8", PType(Type::getInt8Ty(getGlobalContext()), true));
+	type_table.set("int16", PType(Type::getInt16Ty(getGlobalContext()), true));
+	type_table.set("int32", PType(Type::getInt32Ty(getGlobalContext()), true));
+	type_table.set("int64", PType(Type::getInt64Ty(getGlobalContext()), true));
+	type_table.set("uint8", PType(Type::getInt8Ty(getGlobalContext()), false));
+	type_table.set("uint16", PType(Type::getInt16Ty(getGlobalContext()), false));
+	type_table.set("uint32", PType(Type::getInt32Ty(getGlobalContext()), false));
+	type_table.set("uint64", PType(Type::getInt64Ty(getGlobalContext()), false));
+	type_table.set("float32", PType(Type::getFloatTy(getGlobalContext())));
+	type_table.set("float64", PType(Type::getDoubleTy(getGlobalContext())));
 
 	// NOTE: A lot of the front-end code relies on a lot of pointers everywhere.
 	// Make sure to benchmark the performance of this at some point - the compiler
@@ -231,6 +234,7 @@ int main() {
 	parser.memory = lexer.memory;
 	generator.root = parser.parse();
 	free(parser.tokens);
+	// TODO: Fancy errors which output the text containing the issue would be good
 	if (parser.error) {
 		// parser.strings.free();
 		// parser.nodes.free();
@@ -242,14 +246,18 @@ int main() {
 	// Parse Debug Output
 	printf_ast(generator.root, "ROOT");
 
-	// NOTE: Do we want a 'semantic analysis'-esque here or not?
-
 	 // Code Generation
 	printf("\nLLVM IR: \n");
 	generator.env = parser.env;
 	generator.generate();
-	if (generator.error)
-		fatal_error("Code generation failed with error: %s\n", generator.error);
+	if (generator.error) {
+		if (generator.errnode)
+			fatal_error("Codegen failed at line %d, col %d: %s\n",
+			            generator.errnode->line_no, generator.errnode->col_no,
+			            generator.error);
+		else
+			fatal_error("Codegen error: %s\n", generator.error);
+	}
 
 	// parser.memory->free();
 

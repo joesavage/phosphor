@@ -26,6 +26,7 @@ private:
 	bool peek_type();
 	bool peek_unary_operator();
 	bool peek_binary_operator();
+	ASTNode *create_node(ASTNodeType type);
 	PToken *scan_token(PTokenType type, const char *value);
 	PToken *scan_token_type(PTokenType type);
 	void set_error(const char *format, ...);

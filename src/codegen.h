@@ -13,6 +13,7 @@ using namespace llvm;
 struct CodeGenerator {
 	ASTNode *root;
 	char *error;
+	ASTNode *errnode;
 	Environment *env;
 	Module *module;
 	IRBuilder<> *builder;
@@ -26,7 +27,7 @@ private:
 	PType lookup_type(char *value);
 	PFunction lookup_function(char *name);
 	PValue *lookup_symbol(char *symbol);
-	void set_error(const char *format, ...);
+	void set_error(ASTNode *node, const char *format, ...);
 };
 
 #endif

@@ -38,6 +38,8 @@ struct ASTNode::data::utype &name = node->data.utype
 // gains over dynamic dispatch that I'm just going to run with it.
 struct ASTNode {
 	ASTNodeType type;
+	unsigned int line_no;
+	unsigned int col_no;
 	union data {
 		struct real {
 			double value;
