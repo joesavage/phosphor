@@ -10,7 +10,7 @@
 
 using namespace llvm;
 
-// TODO: The quality of errors in here needs improving. Inc. line & col no!
+// TODO: The quality of errors in here needs improving.
 
 // TODO: At some point, we need to focus on quality of the LLVM IR generated.
 //       [COMPARE TO: $ clang -S -emit-llvm foo.c]
@@ -158,8 +158,7 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 			result.type = pfunction.return_type;
 			result.value = builder->CreateCall(function,
 			                                   ArrayRef<Value *>(args.getPointer(0),
-			                                                     args_count),
-			                                   "calltmp");
+			                                                     args_count));
 			break;
 		}
 		case NODE_CONSTANT_INT:
@@ -349,14 +348,24 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 		case NODE_VARIABLE_DECLARATION:
 		{
 			DECL_ASTNODE_DATA(node, variable_declaration, pnode);
-			PValue variable(pnode.type->data.string.value, NULL);
-			env->symbol_table.set(pnode.name->data.string.value, variable);
+			char *variable_name = pnode.name->data.string.value;
+			char *variable_type = pnode.type->data.string.value;
+			PValue variable(variable_type, NULL);
+			if (env->symbol_table.exists(variable_name)) {
+				set_error(pnode.type, "variable naming conflict");
+				break;
+			}
+
+			env->symbol_table.set(variable_name, variable);
 			break;
 		}
 		case NODE_BLOCK:
 		{
 			DECL_ASTNODE_DATA(node, block, pnode);
+			Environment *prev_env = env;
+			env = pnode.env;
 			generate_statement(pnode.left);
+			env = prev_env;
 			break;
 		}
 		case NODE_UNARY_OPERATOR:
@@ -461,10 +470,17 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 		case NODE_RETURN:
 		{
 			DECL_ASTNODE_DATA(node, unary_operator, pnode);
-			PValue val = generate_expression(pnode.operand);
-			if (error)
-				break;
-			// TODO: Type check
+			PValue val;
+			if (pnode.operand) {
+				val = generate_expression(pnode.operand);
+				if (error)
+					break;
+			} else {
+				val.value = NULL;
+			}
+
+			// TODO: Type check! How to know the function we currently reside in?
+			// I guess the current 'env' should hold this information?
 			builder->CreateRet(val.value);
 			break;
 		}

@@ -439,7 +439,9 @@ ASTNode *Parser::parse_return() {
 
 	ASTNode *result = create_node(NODE_RETURN);
 	result->data.unary_operator.operand = parse_expression();
-	if (!result->data.unary_operator.operand || error)
+	if (!result->data.unary_operator.operand)
+		error = NULL;
+	else if (error)
 		return NULL;
 
 	return result;

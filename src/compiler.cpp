@@ -38,7 +38,7 @@ static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 			case NODE_BLOCK:
 			{
 				DECL_ASTNODE_DATA(node, block, pdata);
-				printf("BLOCK\n");
+				printf(node->type == NODE_STATEMENTS ? "STATEMENTS\n" : "BLOCK\n");
 				printf_ast(pdata.left, "LEFT", depth + 1);
 				printf_ast(pdata.right, "RIGHT", depth + 1);
 				break;
