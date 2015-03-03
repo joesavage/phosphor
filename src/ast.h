@@ -74,7 +74,7 @@ struct ASTNode {
 		struct conditional {
 			ASTNode *condition;
 			ASTNode *then;
-			ASTNode *other;
+			ASTNode *otherwise;
 		} conditional;
 		struct function {
 			ASTNode *signature;

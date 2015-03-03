@@ -27,6 +27,7 @@ private:
 	PType lookup_type(char *value);
 	PFunction lookup_function(char *name);
 	PValue *lookup_symbol(char *symbol);
+	PValue get_boolean_value(bool value);
 	void set_error(ASTNode *node, const char *format, ...);
 };
 

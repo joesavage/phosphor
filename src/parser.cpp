@@ -398,11 +398,11 @@ ASTNode *Parser::parse_if() {
 
 	if (scan_token(TOKEN_KEYWORD, "else")) {
 		if (peek_token(TOKEN_KEYWORD, "if"))
-			result->data.conditional.other = parse_if();
+			result->data.conditional.otherwise = parse_if();
 		else
-			result->data.conditional.other = parse_block();
+			result->data.conditional.otherwise = parse_block();
 
-		if (!result->data.conditional.other || error)
+		if (!result->data.conditional.otherwise || error)
 			return NULL;
 	}
 
@@ -424,8 +424,8 @@ ASTNode *Parser::parse_while() {
 		return NULL;
 
 	if (scan_token(TOKEN_KEYWORD, "else")) {
-		result->data.conditional.other = parse_block();
-		if (!result->data.conditional.other || error)
+		result->data.conditional.otherwise = parse_block();
+		if (!result->data.conditional.otherwise || error)
 			return NULL;
 	}
 

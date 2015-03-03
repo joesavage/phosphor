@@ -49,6 +49,13 @@ PValue *CodeGenerator::lookup_symbol(char *symbol) {
 	return search_for_symbol(*env, symbol);
 }
 
+PValue CodeGenerator::get_boolean_value(bool value) {
+	PValue result;
+	result.type = "bool";
+	result.value = ConstantInt::get(getGlobalContext(), APInt(value ? 1 : 0, 0));
+	return result;
+}
+
 
 PValue CodeGenerator::generate_expression(ASTNode *node) {
 	PValue result;
@@ -390,20 +397,18 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 				          "unsupported type for if statement condition");
 				break;
 			}
-			// TODO: Factor 'ConstantInt' for 'true' so it can be easily reused.
-			cond.value = builder->CreateICmpNE(cond.value,
-			                                   ConstantInt::get(getGlobalContext(),
-			                                                    APInt(1, 0)),
-			                                   "ifcond");
+
+			PValue true_val = get_boolean_value(true);
+			cond.value = builder->CreateICmpNE(cond.value, true_val.value, "ifcond");
 
 			Function *function;
-			BasicBlock *then, *other, *merge;
+			BasicBlock *then, *otherwise, *merge;
 
 			function = builder->GetInsertBlock()->getParent();
 			then = BasicBlock::Create(getGlobalContext(), "then", function);
-			other = BasicBlock::Create(getGlobalContext(), "else", function);
+			otherwise = BasicBlock::Create(getGlobalContext(), "else", function);
 			merge = BasicBlock::Create(getGlobalContext(), "ifcont", function);
-			builder->CreateCondBr(cond.value, then, other);
+			builder->CreateCondBr(cond.value, then, otherwise);
 
 			builder->SetInsertPoint(then);
 			generate_statement(pnode.then);
@@ -412,18 +417,14 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 			builder->CreateBr(merge);
 			then = builder->GetInsertBlock();
 
-			builder->SetInsertPoint(other);
-			if (pnode.other) { // TODO: Rename 'other' (closer to 'else')
-				generate_statement(pnode.other);
+			builder->SetInsertPoint(otherwise);
+			if (pnode.otherwise) {
+				generate_statement(pnode.otherwise);
 				if (error)
 					break;
 			}
 			builder->CreateBr(merge);
-			other = builder->GetInsertBlock();
-
-			// TODO: Is returning from inside blocks an issue? It doesn't seem to be,
-			// but also I've seen people use phi nodes for this kind of purpose.
-			// Can we rely on an optimise pass to make that happen? Hmm..
+			otherwise = builder->GetInsertBlock();
 
 			builder->SetInsertPoint(merge);
 			break;

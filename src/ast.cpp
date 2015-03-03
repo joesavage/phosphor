@@ -27,7 +27,7 @@ void initialise_node(ASTNode *node, ASTNodeType type) {
 		case NODE_UNTIL_LOOP:
 			node->data.conditional.condition = NULL;
 			node->data.conditional.then = NULL;
-			node->data.conditional.other = NULL;
+			node->data.conditional.otherwise = NULL;
 			break;
 		case NODE_FUNCTION:
 			node->data.function.signature = NULL;
