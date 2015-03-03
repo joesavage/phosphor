@@ -40,15 +40,13 @@ void MemoryList<T>::free() {
 	_cursor = 0;
 }
 
-#include <stdio.h>
-
 template <typename T>
 size_t MemoryList<T>::reserve(size_t length) {
 	if (_size == 0)
 		_size = MEMORY_LIST_DEFAULT_SIZE;
-	if ((_cursor + length) > _size || _cursor > _size) {
+	if ((_cursor + length) >= _size || _cursor >= _size) {
 		size_t old_size = _size;
-		while ((_cursor + length) > _size || _cursor > _size)
+		while ((_cursor + length) >= _size || _cursor >= _size)
 			_size *= 2;
 
 		T *old__data = _data;
@@ -63,7 +61,7 @@ size_t MemoryList<T>::reserve(size_t length) {
 		_data = (T *)heap_alloc(_size);
 
 	size_t destination = _cursor;
-	_cursor += length + 1;
+	_cursor += length;
 
 	// TODO: This mix of T-rel and byte-rel units is REALLY DUMB!
 	return destination / sizeof(T);

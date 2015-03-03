@@ -306,8 +306,9 @@ ASTNode *Parser::parse_block() {
 
 	Environment *prev_env = env;
 	env = result->data.block.env;
-	result->data.block.left = parse_statements();
-	if (!result->data.block.left || error)
+
+	result->data.block.statements = parse_statements();
+	if (!result->data.block.statements || error)
 		return NULL;
 
 	if (!scan_token(TOKEN_RESERVED_PUNCTUATION, "}")) {
@@ -469,20 +470,16 @@ ASTNode *Parser::parse_statement() {
 
 ASTNode *Parser::parse_statements() {
 	ASTNode *result = NULL;
-
-	ASTNode **current = &result;
 	ASTNode *statement;
-	while (!eof()) { // TODO: This node structure should be MemoryList of stmts
+
+	while (!eof()) {
 		if ((!(statement = parse_statement()) || error))
 			break;
-
-		if (!(*current))
-			*current = create_node(NODE_STATEMENTS);
-		(*current)->data.block.left = statement;
-		(*current)->data.block.right = NULL;
-		current = &(*current)->data.block.right;
-
 		
+		if (!result)
+			result = create_node(NODE_STATEMENTS);
+		
+		result->data.statements.children.add(statement);
 		scan_token(TOKEN_RESERVED_PUNCTUATION, ";");
 	}
 

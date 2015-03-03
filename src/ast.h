@@ -59,9 +59,11 @@ struct ASTNode {
 			ASTNode *left;
 			ASTNode *right;
 		} binary_operator;
+		struct statements {
+			MemoryList <ASTNode *> children;
+		} statements;
 		struct block {
-			ASTNode *left;
-			ASTNode *right;
+			ASTNode *statements;
 			Environment *env;
 		} block;
 		struct variable_declaration {

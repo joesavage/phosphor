@@ -9,10 +9,11 @@ void initialise_node(ASTNode *node, ASTNodeType type) {
 	// in uninitialized union members.
 
 	switch(type) {
-		case NODE_BLOCK:
 		case NODE_STATEMENTS:
-			node->data.block.left = NULL;
-			node->data.block.right = NULL;
+			node->data.statements.children = MemoryList<ASTNode *>();
+			break;
+		case NODE_BLOCK:
+			node->data.block.statements = NULL;
 			node->data.block.env = NULL;
 			break;
 		case NODE_VARIABLE_DECLARATION:

@@ -337,12 +337,12 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 	switch (node->type) {
 		case NODE_STATEMENTS:
 		{
-			do {
-				if (node->data.block.left)
-					generate_statement(node->data.block.left);
+			DECL_ASTNODE_DATA(node, statements, pnode);
+			for (size_t i = 0; i < pnode.children.size(); ++i) {
+				generate_statement(pnode.children[i]);
 				if (error)
-					return;
-			} while ((node = node->data.block.right));
+					break;
+			}
 			break;
 		}
 		case NODE_VARIABLE_DECLARATION:
@@ -364,7 +364,7 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 			DECL_ASTNODE_DATA(node, block, pnode);
 			Environment *prev_env = env;
 			env = pnode.env;
-			generate_statement(pnode.left);
+			generate_statement(pnode.statements);
 			env = prev_env;
 			break;
 		}

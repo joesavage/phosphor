@@ -35,12 +35,18 @@ static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 			printf("%s: ", prefix);
 		switch (node->type) {
 			case NODE_STATEMENTS:
+			{
+				DECL_ASTNODE_DATA(node, statements, pdata);
+				printf("STATEMENTS\n");
+				for (size_t i = 0; i < pdata.children.size(); ++i)
+					printf_ast(pdata.children[i], "STMT", depth + 1);
+				break;
+			}
 			case NODE_BLOCK:
 			{
 				DECL_ASTNODE_DATA(node, block, pdata);
-				printf(node->type == NODE_STATEMENTS ? "STATEMENTS\n" : "BLOCK\n");
-				printf_ast(pdata.left, "LEFT", depth + 1);
-				printf_ast(pdata.right, "RIGHT", depth + 1);
+				printf("BLOCK\n");
+				printf_ast(pdata.statements, "STATEMENTS", depth + 1);
 				break;
 			}
 			case NODE_VARIABLE_DECLARATION:
