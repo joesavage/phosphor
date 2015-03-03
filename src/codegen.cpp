@@ -165,7 +165,8 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 			result.type = pfunction.return_type;
 			result.value = builder->CreateCall(function,
 			                                   ArrayRef<Value *>(args.getPointer(0),
-			                                                     args_count));
+			                                                     args_count),
+			                                   "calltmp");
 			break;
 		}
 		case NODE_CONSTANT_INT:
@@ -264,6 +265,18 @@ PFunction CodeGenerator::generate_function(ASTNode *node) {
 			                            function_name, module);
 			function->addFnAttr(Attribute::NoUnwind);
 
+			// Set up the function parameters (their symbol table ptrs and names)
+			{
+				Function::arg_iterator it;
+				size_t i;
+				for (it = function->arg_begin(), i = 0; i < args.size(); ++i, ++it) {
+					DECL_ASTNODE_DATA(pnode.args[i], variable_declaration, arg);
+					char *param_name = arg.name->data.string.value;
+					it->setName(param_name);
+					lookup_symbol(param_name)->value = it;
+				}
+			}
+
 			// If the name we got back isn't the one we assigned, there was a conflict
 			if (function->getName() != function_name) {
 				// Erase the just-created signature, and get the previous one.
@@ -316,6 +329,7 @@ PFunction CodeGenerator::generate_function(ASTNode *node) {
 			PFunction function = generate_function(pnode.signature);
 			if (error)
 				break;
+
 			BasicBlock *BB = BasicBlock::Create(getGlobalContext(), "entry",
 			                                    function.value);
 			builder->SetInsertPoint(BB);
@@ -415,7 +429,6 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 			if (error)
 				break;
 			builder->CreateBr(merge);
-			then = builder->GetInsertBlock();
 
 			builder->SetInsertPoint(otherwise);
 			if (pnode.otherwise) {
@@ -424,7 +437,6 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 					break;
 			}
 			builder->CreateBr(merge);
-			otherwise = builder->GetInsertBlock();
 
 			builder->SetInsertPoint(merge);
 			break;

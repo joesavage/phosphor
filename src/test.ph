@@ -1,25 +1,15 @@
 fn putchar(int32 ch) -> int32;
 
-fn print_hello() -> void {
-	putchar(72);  // H
-	putchar(101); // e
-	putchar(108); // l
-	putchar(108); // l
-	putchar(111); // o
-	putchar(44);  // ,
-	putchar(32);  //  
-	putchar(87);  // W
-	putchar(111); // o
-	putchar(114); // r
-	putchar(108); // l
-	putchar(100); // d
-	putchar(33);  // !
-	putchar(10);  // \n
-	return;
+fn fib(int32 n) -> int32 {
+	if (n == 0) {
+		return 0;
+	} else if (n == 1) {
+		return 1;
+	}
+
+	return fib(n - 1) + fib(n - 2);
 }
 
 fn main() -> int32 {
-	print_hello();
-
-	return 0;
+	return fib(8);
 }

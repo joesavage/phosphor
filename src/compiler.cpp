@@ -121,6 +121,13 @@ static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 				break;
 			}
 			case NODE_IF:
+			{
+				printf("IF\n");
+				printf_ast(node->data.conditional.condition, "COND", depth + 1);
+				printf_ast(node->data.conditional.then, "THEN", depth + 1);
+				printf_ast(node->data.conditional.otherwise, "ELSE", depth + 1);
+				break;
+			}
 			case NODE_DO_LOOP:
 			case NODE_WHILE_LOOP:
 			case NODE_UNTIL_LOOP:

@@ -47,12 +47,12 @@ struct PValue {
 	}
 };
 
-// TODO: Function argument types should live in here one day. Similarly, one day
-// function overloading support should be present.
+// TODO: Function overloading should be supported here one day.
 struct PFunction {
 	char *return_type;
 	Function *value;
 	MemoryList<char *> arg_types;
+	// TODO: Some state to show whether this is a binary/unary operator (or not).
 
 	PFunction() {
 		return_type = NULL;
