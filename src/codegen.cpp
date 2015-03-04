@@ -3,6 +3,12 @@
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/CallingConv.h"
 
+#include "llvm/ExecutionEngine/ExecutionEngine.h"
+#include "llvm/ExecutionEngine/SectionMemoryManager.h"
+#include "llvm/Support/TargetSelect.h"
+#include "llvm/Analysis/Passes.h"
+#include "llvm/Transforms/Scalar.h"
+
 #include "codegen.h"
 #include "hashmap.hpp"
 #include "environment.h"
@@ -43,10 +49,9 @@ PFunction CodeGenerator::lookup_function(char *name) {
 	return function ? *function : PFunction();
 }
 
-// NOTE: Keeping pointers to these is dangerous as if the HashMap resizes it'll
-// cause pointer invalidation. We can probably switch to value semantics soon?
-PValue *CodeGenerator::lookup_symbol(char *symbol) {
-	return search_for_symbol(*env, symbol);
+PVariable CodeGenerator::lookup_symbol(char *name) {
+	PVariable *symbol = search_for_symbol(*env, name);
+	return symbol ? *symbol : PVariable();
 }
 
 PValue CodeGenerator::get_boolean_value(bool value) {
@@ -56,6 +61,47 @@ PValue CodeGenerator::get_boolean_value(bool value) {
 	return result;
 }
 
+AllocaInst *CodeGenerator::create_entry_block_alloca(char *name, Type *type) {
+	PFunction function = lookup_function(env->current_function);
+	if (!function.return_type || !function.value) {
+		fatal_error("invalid 'current' function for alloca creation\n");
+		return NULL;
+	}
+
+	BasicBlock *entry_bb = &function.value->getEntryBlock();
+	IRBuilder<> entry_builder(entry_bb, entry_bb->begin());
+	return entry_builder.CreateAlloca(type, 0, name);
+}
+
+PVariable CodeGenerator::generate_variable_declaration(ASTNode *node) {
+	PVariable result;
+
+	switch (node->type) {
+		case NODE_VARIABLE_DECLARATION:
+		{
+			DECL_ASTNODE_DATA(node, variable_declaration, pnode);
+			char *variable_name = pnode.name->data.string.value;
+			char *variable_type_name = pnode.type->data.string.value;
+			PType variable_type = lookup_type(variable_type_name);
+			if (env->symbol_table.exists(variable_name)) {
+				set_error(pnode.type, "variable naming conflict");
+				break;
+			}
+
+			// alloca at the entry block so that the mem2reg pass can hit
+			result.type = variable_type_name;
+			result.value = create_entry_block_alloca(variable_name,
+			                                         variable_type.type);
+			env->symbol_table.set(variable_name, result);
+			break;
+		}
+		default:
+			set_error(node, "failed to generate variable for ASTNode");
+			break;
+	}
+
+	return result;
+}
 
 PValue CodeGenerator::generate_expression(ASTNode *node) {
 	PValue result;
@@ -67,8 +113,8 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 
 			if (!strcmp(pnode.value, "=")) {
 				DECL_ASTNODE_DATA(pnode.left, string, symbol_name);
-				PValue *var_sym = lookup_symbol(symbol_name.value);
-				if (!var_sym) {
+				PVariable var_sym = lookup_symbol(symbol_name.value);
+				if (!var_sym.type) {
 					set_error(pnode.left, "invalid symbol name for assignment");
 					break;
 				}
@@ -76,17 +122,15 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 				if (error)
 					break;
 
-				if (lookup_type(value) != lookup_type(*var_sym)) {
+				if (lookup_type(value) != lookup_type(var_sym.type)) {
 					// TODO: Type conversions (factor out) - for integers, using Trunc or
 					// ZExt/SExt (getIntegerBitWidth).
 					set_error(pnode.right, "type mismatch in assignment");
 					break;
 				}
 
-				// TODO: This side-effect means that all assignment expressions end up
-				// being immediately executed. This is obviously less than ideal, and so
-				// we need to implement mutable state by allocating memory.
-				var_sym->value = value.value;
+				builder->CreateStore(value.value, var_sym.value);
+				result.value = value.value;
 				break;
 			}
 
@@ -210,12 +254,15 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 		case NODE_IDENTIFIER:
 		{
 			DECL_ASTNODE_DATA(node, string, pnode);
-			PValue *value = lookup_symbol(pnode.value);
-			if (!value) {
+			PVariable value = lookup_symbol(pnode.value);
+			if (!value.type) {
 				set_error(node, "failed to find symbol '%s'", pnode.value);
 				break;
 			}
-			return *value;
+
+			result.type = value.type;
+			result.value = builder->CreateLoad(value.value, pnode.value);
+			break;
 		}
 		default:
 			set_error(node, "failed to generate expression for ASTNode");
@@ -239,9 +286,6 @@ PFunction CodeGenerator::generate_function(ASTNode *node) {
 			MemoryList<Type *> args(args_count);
 			for (size_t i = 0; i < args_count; ++i) {
 				DECL_ASTNODE_DATA(pnode.args[i], variable_declaration, arg);
-				generate_statement(pnode.args[i]);
-				if (error)
-					break;
 
 				char *type_name = arg.type->data.string.value;
 				result.arg_types.add(type_name);
@@ -273,7 +317,6 @@ PFunction CodeGenerator::generate_function(ASTNode *node) {
 					DECL_ASTNODE_DATA(pnode.args[i], variable_declaration, arg);
 					char *param_name = arg.name->data.string.value;
 					it->setName(param_name);
-					lookup_symbol(param_name)->value = it;
 				}
 			}
 
@@ -337,6 +380,13 @@ PFunction CodeGenerator::generate_function(ASTNode *node) {
 			Environment *prev_env = env; // TODO: Helper for env push/pop
 			env = pnode.signature->data.function_signature.env;
 
+			DECL_ASTNODE_DATA(pnode.signature, function_signature, psignature);
+			for (size_t i = 0; i < psignature.args.size(); ++i) {
+				generate_variable_declaration(psignature.args[i]);
+				if (error)
+					break;
+			}
+
 			generate_statement(pnode.body);
 			if (error)
 				break;
@@ -344,6 +394,9 @@ PFunction CodeGenerator::generate_function(ASTNode *node) {
 			env = prev_env;
 
 			result = function;
+			verifyFunction(*function.value);
+			fpm->run(*function.value);
+
 			break;
 		}
 		default:
@@ -366,20 +419,6 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 			}
 			break;
 		}
-		case NODE_VARIABLE_DECLARATION:
-		{
-			DECL_ASTNODE_DATA(node, variable_declaration, pnode);
-			char *variable_name = pnode.name->data.string.value;
-			char *variable_type = pnode.type->data.string.value;
-			PValue variable(variable_type, NULL);
-			if (env->symbol_table.exists(variable_name)) {
-				set_error(pnode.type, "variable naming conflict");
-				break;
-			}
-
-			env->symbol_table.set(variable_name, variable);
-			break;
-		}
 		case NODE_BLOCK:
 		{
 			DECL_ASTNODE_DATA(node, block, pnode);
@@ -399,6 +438,9 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 			break;
 		case NODE_FUNCTION_CALL:
 			generate_expression(node);
+			break;
+		case NODE_VARIABLE_DECLARATION:
+			generate_variable_declaration(node);
 			break;
 		case NODE_IF:
 		{
@@ -470,7 +512,7 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 			                                   "whilecond");
 			builder->CreateCondBr(cond.value, loop, after);
 
-			// TODO: Handle 'other' branch (while..else)
+			// TODO: Handle 'otherwise' branch (while..else)
 
 			builder->SetInsertPoint(loop);
 			generate_statement(pnode.then);
@@ -515,6 +557,9 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 }
 
 void CodeGenerator::generate() {
+	InitializeNativeTarget();
+  InitializeNativeTargetAsmPrinter();
+  InitializeNativeTargetAsmParser();
 	IRBuilder<> builder = IRBuilder<>(getGlobalContext());
 	this->builder = &builder;
 	module = new Module("program", getGlobalContext());
@@ -522,14 +567,25 @@ void CodeGenerator::generate() {
 	error = NULL;
 	errnode = NULL;
 
-	// TODO: Add module metadata here?
+	// TODO: Add module metadata here (inc. DataLayout)
+
+	// TODO: Think about (and extend) code passes (optimisation, etc.)
+	FunctionPassManager fpm(module);
+	fpm.add(createBasicAliasAnalysisPass());
+	fpm.add(createPromoteMemoryToRegisterPass());
+	fpm.add(createInstructionCombiningPass());
+	fpm.add(createReassociatePass());
+	fpm.add(createConstantPropagationPass());
+	fpm.add(createDeadCodeEliminationPass());
+	fpm.add(createGVNPass());
+	fpm.add(createCFGSimplificationPass());
+	fpm.doInitialization();
+	this->fpm = &fpm;
 
 	generate_statement(root);
 	if (error)
 		return;
 	verifyModule(*module);
-
-	// TODO: Insert numerous code passes here (various optimisations, etc.)
 
 	module->dump();
 	delete module;

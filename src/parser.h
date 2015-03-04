@@ -19,7 +19,9 @@ struct Parser {
 
 	ASTNode *parse();
 private:
-	void set_environment(ASTNode *node, Environment *parent);
+	void set_environment(ASTNode *node,
+	                     Environment *parent,
+	                     char *current_function = NULL);
 	bool eof();
 	bool peek_token_type(PTokenType type);
 	bool peek_token(PTokenType type, const char *value);

@@ -23,10 +23,15 @@ void Parser::set_error(const char *format, ...) {
 	error = buffer;
 }
 
-void Parser::set_environment(ASTNode *node, Environment *parent) {
+void Parser::set_environment(ASTNode *node,
+                             Environment *parent,
+                             char *current_function)
+{
 	Environment *env = (Environment *)memory->reserve(sizeof(Environment));
 	*env = Environment();
 	env->parent = parent;
+	env->current_function = current_function ? current_function
+	                                         : parent->current_function;
 
 	switch (node->type) {
 		case NODE_FUNCTION_SIGNATURE:
@@ -326,7 +331,6 @@ ASTNode *Parser::parse_function() {
 	}
 
 	ASTNode *signature = create_node(NODE_FUNCTION_SIGNATURE);
-	set_environment(signature, env);
 
 	ASTNode *identifier = parse_identifier();
 	if (!identifier) {
@@ -334,6 +338,9 @@ ASTNode *Parser::parse_function() {
 		return NULL;
 	}
 	signature->data.function_signature.name = identifier;
+
+	// TODO: When we support function overloading, we need to change this line.
+	set_environment(signature, env, identifier->data.string.value);
 
 	Environment *prev_env = env;
 	env = signature->data.function_signature.env;

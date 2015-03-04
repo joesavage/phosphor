@@ -4,6 +4,7 @@
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Value.h"
 #include "llvm/IR/Function.h"
+#include "llvm/IR/Instructions.h"
 
 #include "hashmap.hpp"
 #include "memorylist.hpp"
@@ -47,6 +48,21 @@ struct PValue {
 	}
 };
 
+struct PVariable {
+	char *type;
+	AllocaInst *value;
+
+	PVariable() {
+		type = NULL;
+		value = NULL;
+	}
+
+	PVariable(char *type, AllocaInst *value) {
+		this->type = type;
+		this->value = value;
+	}
+};
+
 // TODO: Function overloading should be supported here one day.
 struct PFunction {
 	char *return_type;
@@ -67,15 +83,16 @@ struct PFunction {
 
 struct Environment {
 	HashMap<PType> type_table;
-	HashMap<PValue> symbol_table;
+	HashMap<PVariable> symbol_table;
 	HashMap<PFunction> function_table;
 
+	char *current_function;
 	Environment *parent;
 
-	Environment() { parent = NULL; }
+	Environment() { parent = NULL; current_function = NULL; }
 };
 
-PValue *search_for_symbol(Environment env, char *name);
+PVariable *search_for_symbol(Environment env, char *name);
 PType *search_for_type(Environment env, char *name);
 PFunction *search_for_function(Environment env, char *name);
 

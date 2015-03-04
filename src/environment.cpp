@@ -1,9 +1,9 @@
 #include "environment.h"
 #include "helpers.h"
 
-PValue *search_for_symbol(Environment env, char *name) {
+PVariable *search_for_symbol(Environment env, char *name) {
 	Environment *current = &env;
-	HashNode<PValue> *result;
+	HashNode<PVariable> *result;
 	do {
 		if ((result = current->symbol_table[name]))
 			return &result->value;

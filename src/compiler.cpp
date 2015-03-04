@@ -198,7 +198,7 @@ int main() {
 	parser.env = (Environment *)parser.memory->reserve(sizeof(Environment));
 	*parser.env = Environment();
 	HashMap<PType> &type_table = parser.env->type_table;
-	HashMap<PValue> &symbol_table = parser.env->symbol_table;
+	HashMap<PVariable> &symbol_table = parser.env->symbol_table;
 	HashMap<PFunction> &function_table = parser.env->function_table;
 	symbol_table.size = 128;
 	type_table.size = 64;

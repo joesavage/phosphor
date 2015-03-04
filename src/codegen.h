@@ -4,6 +4,7 @@
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/IRBuilder.h"
+#include "llvm/PassManager.h"
 
 #include "ast.h"
 #include "environment.h"
@@ -17,17 +18,20 @@ struct CodeGenerator {
 	Environment *env;
 	Module *module;
 	IRBuilder<> *builder;
+	FunctionPassManager *fpm;
 
 	void generate();
 private:
 	void generate_statement(ASTNode *node);
+	PVariable generate_variable_declaration(ASTNode *node);
 	PValue generate_expression(ASTNode *node);
 	PFunction generate_function(ASTNode *node);
 	PType lookup_type(PValue value);
 	PType lookup_type(char *value);
 	PFunction lookup_function(char *name);
-	PValue *lookup_symbol(char *symbol);
+	PVariable lookup_symbol(char *name);
 	PValue get_boolean_value(bool value);
+	AllocaInst *create_entry_block_alloca(char *name, Type *type);
 	void set_error(ASTNode *node, const char *format, ...);
 };
 
