@@ -309,17 +309,6 @@ PFunction CodeGenerator::generate_function(ASTNode *node) {
 			                            function_name, module);
 			function->addFnAttr(Attribute::NoUnwind);
 
-			// Set up the function parameters (their symbol table ptrs and names)
-			{
-				Function::arg_iterator it;
-				size_t i;
-				for (it = function->arg_begin(), i = 0; i < args.size(); ++i, ++it) {
-					DECL_ASTNODE_DATA(pnode.args[i], variable_declaration, arg);
-					char *param_name = arg.name->data.string.value;
-					it->setName(param_name);
-				}
-			}
-
 			// If the name we got back isn't the one we assigned, there was a conflict
 			if (function->getName() != function_name) {
 				// Erase the just-created signature, and get the previous one.
@@ -380,11 +369,23 @@ PFunction CodeGenerator::generate_function(ASTNode *node) {
 			Environment *prev_env = env; // TODO: Helper for env push/pop
 			env = pnode.signature->data.function_signature.env;
 
-			DECL_ASTNODE_DATA(pnode.signature, function_signature, psignature);
-			for (size_t i = 0; i < psignature.args.size(); ++i) {
-				generate_variable_declaration(psignature.args[i]);
-				if (error)
-					break;
+			{
+				DECL_ASTNODE_DATA(pnode.signature, function_signature, psignature);
+				MemoryList<ASTNode *> args = psignature.args;
+				Function *funcval = function.value;
+				Function::arg_iterator it;
+				size_t i;
+				for (it = funcval->arg_begin(), i = 0; i < args.size(); ++i, ++it) {
+					generate_variable_declaration(args[i]);
+					if (error)
+						break;
+
+					DECL_ASTNODE_DATA(args[i], variable_declaration, arg);
+					char *param_name = arg.name->data.string.value;
+					it->setName(param_name);
+					PVariable param = lookup_symbol(param_name);
+					builder->CreateStore(it, param.value);
+				}
 			}
 
 			generate_statement(pnode.body);
