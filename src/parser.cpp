@@ -199,14 +199,12 @@ ASTNode *Parser::parse_atom() {
 			ASTNode *call = create_node(NODE_FUNCTION_CALL);
 
 			ASTNode *arg;
+			// TODO: 'func(arg1, arg2,)' parses without errors at current.
 			while ((arg = parse_expression())) {
 				call->data.function_call.args.add(arg);
 				if (!scan_token(TOKEN_RESERVED_PUNCTUATION, ","))
 					break;
 			}
-			// TODO: We actually don't want to ignore all errors here. At all.
-			// Only want to ignore some (i.e. failure to parse /anything/) errors.
-			error = NULL;
 
 			call->data.function_call.name = term;
 			term = call;
@@ -351,12 +349,11 @@ ASTNode *Parser::parse_function() {
 	}
 
 	ASTNode *arg;
-	while ((arg = parse_variable_declaration())) {
+	while ((peek_type()) && (arg = parse_variable_declaration())) {
 		signature->data.function_signature.args.add(arg);
 		if (!scan_token(TOKEN_RESERVED_PUNCTUATION, ","))
 			break;
 	}
-	error = NULL; // TODO: We only want to ignore some errors.
 
 	if (!scan_token(TOKEN_RESERVED_PUNCTUATION, ")")) {
 		set_error("expected closing bracket in function signature");
