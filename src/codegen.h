@@ -31,6 +31,7 @@ private:
 	PFunction lookup_function(char *name);
 	PVariable lookup_symbol(char *name);
 	PValue get_boolean_value(bool value);
+	bool implicit_type_convert(PValue *source, char *dest_typename);
 	AllocaInst *create_entry_block_alloca(char *name, Type *type);
 	void set_error(ASTNode *node, const char *format, ...);
 };

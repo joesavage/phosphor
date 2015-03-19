@@ -13,21 +13,27 @@ using namespace llvm;
 
 struct PType {
 	Type *type;
-	bool is_signed; // TODO: Switch to type-specific 'flags' (bitmask).
+
+	// TODO: Switch to type-specific bitmask flags?
+	bool is_signed;
+	size_t numbits;
 
 	PType() {
 		type = NULL;
 		is_signed = false;
+		numbits = 0;
 	}
 
-	PType(Type *type, bool is_signed = false) {
+	PType(Type *type, bool is_signed = false, size_t numbits = 0) {
 		this->type = type;
 		this->is_signed = is_signed;
+		this->numbits = numbits;
 	}
 
 	bool operator==(const PType &ty) {
 		return ty.type == type
-		    && ty.is_signed == is_signed;
+		    && ty.is_signed == is_signed
+		    && ty.numbits == numbits;
 	}
 	bool operator!=(const PType &ty) { return !(*this == ty); }
 };

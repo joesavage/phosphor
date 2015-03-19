@@ -73,6 +73,33 @@ AllocaInst *CodeGenerator::create_entry_block_alloca(char *name, Type *type) {
 	return entry_builder.CreateAlloca(type, 0, name);
 }
 
+bool CodeGenerator::implicit_type_convert(PValue *source, char *dest_typename) {
+	PType source_type = lookup_type(source->type);
+	PType dest_type = lookup_type(dest_typename);
+	if (source_type == dest_type)
+		return true;
+
+	if (!strncmp(source->type, "int", 3)) {
+		// TODO: Use 'numbits' and other state to determine whether we /really/ want
+		// to cast here. We probably don't want to truncate implicitly like this.
+		// Plus, we could easily create the cast instructions manually rather than
+		// relying on 'getCastOpcode' here if required (Trunc, ZExt/SExt, etc.).
+		if (CastInst::isCastable(source_type.type, dest_type.type)) {
+			source->type = dest_typename;
+			auto cast_opcode = CastInst::getCastOpcode(source->value,
+			                                           source_type.is_signed,
+			                                           dest_type.type,
+			                                           dest_type.is_signed);
+			source->value = builder->CreateCast(cast_opcode,
+			                                    source->value,
+			                                    dest_type.type);
+			return true;
+		}
+	}
+
+	return false;
+}
+
 PVariable CodeGenerator::generate_variable_declaration(ASTNode *node) {
 	PVariable result;
 
@@ -122,9 +149,7 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 				if (error)
 					break;
 
-				if (lookup_type(value) != lookup_type(var_sym.type)) {
-					// TODO: Type conversions (factor out) - for integers, using Trunc or
-					// ZExt/SExt (getIntegerBitWidth).
+				if (!implicit_type_convert(&value, var_sym.type)) {
 					set_error(pnode.right, "type mismatch in assignment");
 					break;
 				}
@@ -148,6 +173,9 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 			}
 
 			// Right now, we only have hardcoded support for (32-bit) integers.
+			//
+			// TODO: Implicit type conversion here. Need to consider which operand
+			// to convert from/to (presumably convert to the larger one?).
 			if (lookup_type(left).type != IntegerType::get(getGlobalContext(), 32)) {
 				set_error(pnode.right, "unsupported type for binary operation");
 				break;
@@ -159,7 +187,7 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 				result.value = builder->CreateICmpEQ(left.value, right.value, "eqtmp");
 			} else if (!strcmp(pnode.value, "!=")) {
 				result.type = "bool";
-				result.value = builder->CreateICmpNE(left.value, right.value, "eqtmp");
+				result.value = builder->CreateICmpNE(left.value, right.value, "neqtmp");
 			} else if (!strcmp(pnode.value, "+")) {
 				result.value = builder->CreateAdd(left.value, right.value, "addtmp");
 			} else if (!strcmp(pnode.value, "*")) {
@@ -197,11 +225,12 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 				PValue arg = generate_expression(pnode.args[i]);
 				if (error)
 					break;
-				args.add(arg.value);
-				if (lookup_type(arg.type) != lookup_type(pfunction.arg_types[i])) {
+				if (!implicit_type_convert(&arg, pfunction.arg_types[i])) {
 					set_error(node, "function parameter mis-match at param %d", i);
 					break;
 				}
+				// assert(!strcmp(arg.type, pfunction.arg_types[i]));
+				args.add(arg.value);
 			}
 			if (error)
 				break;
@@ -233,10 +262,9 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 		{
 			DECL_ASTNODE_DATA(node, integer, pnode);
 			result.type = "bool";
-			// TODO: Use the type table information to construct (e.g. numbits) rather
-			// than duplicating it.
 			result.value = ConstantInt::get(getGlobalContext(),
-			                                APInt(1, pnode.value));
+			                                APInt(lookup_type("bool").numbits,
+			                                      pnode.value));
 			break;
 		}
 		case NODE_CONSTANT_FLOAT:
@@ -571,15 +599,16 @@ void CodeGenerator::generate() {
 	// TODO: Add module metadata here (inc. DataLayout)
 
 	// TODO: Think about (and extend) code passes (optimisation, etc.)
+	// Additionally, the order of these needs to be properly thought about!
 	FunctionPassManager fpm(module);
 	fpm.add(createBasicAliasAnalysisPass());
 	fpm.add(createPromoteMemoryToRegisterPass());
-	fpm.add(createInstructionCombiningPass());
 	fpm.add(createReassociatePass());
 	fpm.add(createConstantPropagationPass());
 	fpm.add(createDeadCodeEliminationPass());
 	fpm.add(createGVNPass());
 	fpm.add(createCFGSimplificationPass());
+	fpm.add(createInstructionCombiningPass());
 	fpm.doInitialization();
 	this->fpm = &fpm;
 

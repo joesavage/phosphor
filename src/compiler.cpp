@@ -206,16 +206,16 @@ int main() {
 
 	type_table.set("void", PType(Type::getVoidTy(getGlobalContext())));
 	type_table.set("bool", PType(Type::getInt1Ty(getGlobalContext())));
-	type_table.set("int8", PType(Type::getInt8Ty(getGlobalContext()), true));
-	type_table.set("int16", PType(Type::getInt16Ty(getGlobalContext()), true));
-	type_table.set("int32", PType(Type::getInt32Ty(getGlobalContext()), true));
-	type_table.set("int64", PType(Type::getInt64Ty(getGlobalContext()), true));
-	type_table.set("uint8", PType(Type::getInt8Ty(getGlobalContext()), false));
-	type_table.set("uint16", PType(Type::getInt16Ty(getGlobalContext()), false));
-	type_table.set("uint32", PType(Type::getInt32Ty(getGlobalContext()), false));
-	type_table.set("uint64", PType(Type::getInt64Ty(getGlobalContext()), false));
-	type_table.set("float32", PType(Type::getFloatTy(getGlobalContext())));
-	type_table.set("float64", PType(Type::getDoubleTy(getGlobalContext())));
+	type_table.set("int8", PType(Type::getInt8Ty(getGlobalContext()), true, 8));
+	type_table.set("int16", PType(Type::getInt16Ty(getGlobalContext()), true, 16));
+	type_table.set("int32", PType(Type::getInt32Ty(getGlobalContext()), true, 32));
+	type_table.set("int64", PType(Type::getInt64Ty(getGlobalContext()), true, 64));
+	type_table.set("uint8", PType(Type::getInt8Ty(getGlobalContext()), false, 8));
+	type_table.set("uint16", PType(Type::getInt16Ty(getGlobalContext()), false, 16));
+	type_table.set("uint32", PType(Type::getInt32Ty(getGlobalContext()), false, 32));
+	type_table.set("uint64", PType(Type::getInt64Ty(getGlobalContext()), false, 64));
+	type_table.set("float32", PType(Type::getFloatTy(getGlobalContext()), true, 32));
+	type_table.set("float64", PType(Type::getDoubleTy(getGlobalContext()), true, 64));
 
 	// NOTE: A lot of the front-end code relies on a lot of pointers everywhere.
 	// Make sure to benchmark the performance of this at some point - the compiler
