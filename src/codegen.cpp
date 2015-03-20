@@ -120,6 +120,9 @@ PVariable CodeGenerator::generate_variable_declaration(ASTNode *node) {
 			result.value = create_entry_block_alloca(variable_name,
 			                                         variable_type.type);
 			env->symbol_table.set(variable_name, result);
+
+			if (pnode.action)
+				generate_statement(pnode.action);
 			break;
 		}
 		default:
