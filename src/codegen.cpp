@@ -79,8 +79,9 @@ bool CodeGenerator::implicit_type_convert(PValue *source, char *dest_typename) {
 	if (source_type == dest_type)
 		return true;
 
-	if (!strncmp(source->type, "int", 3)) {
-		// TODO: What about signed/unsigned conversion?
+	if (!strncmp(source->type, "uint", 4) || !strncmp(source->type, "int", 3)) {
+		// TODO: What about signed/unsigned conversion? This comparison clearly
+		// needs modifying!
 		if (source_type.numbits <= dest_type.numbits) {
 			// We could easily create the cast instructions manually rather than
 			// relying on 'getCastOpcode' here if required (Trunc, ZExt/SExt, etc.).
@@ -177,7 +178,8 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 					break;
 
 				if (!implicit_type_convert(&value, var_sym.type)) {
-					set_error(pnode.right, "type mismatch in assignment - expected '%s', got '%s'", var_sym.type, value.type);
+					set_error(pnode.right, "type mismatch in assignment - expected '%s', "
+					          "got '%s'", var_sym.type, value.type);
 					break;
 				}
 
@@ -196,7 +198,8 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 				break;
 
 			if (lookup_type(left) != lookup_type(right)) {
-				set_error(pnode.right, "type mismatch in addition operation!");
+				set_error(pnode.right, "type mismatch in addition operation - expected "
+				          "'%s', got '%s'", left.type, right.type);
 				break;
 			}
 
@@ -290,19 +293,47 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 		}
 		case NODE_CONSTANT_INT:
 		{
-			// TODO: We should create a value with a type reflecting the smallest
-			// standard int size the value fits in. That way, the value can be
-			// implicitly casted up to larger types if it needs to be.
-			//
 			// TODO: If we want an int literal max size instead of just wrapping,
 			// we should add that here.
 			//
-			// TODO: Need to deal with hex, etc. (probably earlier than this stage of
-			// compilation).
+			// TODO: Need to deal with hex, etc.
 			DECL_ASTNODE_DATA(node, string, pnode);
-			result.type = "int32";
+			char *endptr = pnode.value;
+			unsigned long long value = strtoull(pnode.value, &endptr, 10);
+			assert(sizeof(value) >= 8);
+			if (endptr == pnode.value
+			 || (size_t)(endptr - pnode.value) < (strlen(pnode.value))) {
+				set_error(node, "failed to parse invalid integer literal");
+				break;
+			}
+			if (errno == ERANGE) {
+				set_error(node, "integer literal too large");
+				break;
+			}
+
+			// Integer literals are unsigned by default, for now at least.
+			// Values are packaged into the smallest type in which they fit, as they
+			// can be implicitly casted up to larger types when necessary.
+			int numbits = 0;
+			if (value <= 0xff) {
+				result.type = "uint8";
+				numbits = 8;
+			} else if (value <= 0xffff) {
+				result.type = "uint16";
+				numbits = 16;
+			} else if (value <= 0xffffffff) {
+				result.type = "uint32";
+				numbits = 32;
+			} else if (value <= 0xffffffffffffffff) {
+				result.type = "uint64";
+				numbits = 64;
+			} else {
+				set_error(node, "integer literal too large");
+				break;
+			}
+
 			result.value = ConstantInt::get(getGlobalContext(),
-			                                APInt(32, StringRef(pnode.value), 10));
+			                                APInt(numbits, value, false));
 			break;
 		}
 		case NODE_CONSTANT_BOOL:
@@ -403,17 +434,17 @@ PFunction CodeGenerator::generate_function(ASTNode *node) {
 				}
 
 				if (pfunction.arg_types.size() != result.arg_types.size()) {
-					set_error(node, "redefinition of function with parameter number \
-					          mismatch - expected %d, got %d", pfunction.arg_types.size(),
-					          args_count);
+					set_error(node, "redefinition of function with parameter number "
+					          "mismatch - expected %d, got %d",
+					          pfunction.arg_types.size(), args_count);
 					break;
 				}
 				for (size_t i = 0; i < pfunction.arg_types.size(); ++i) {
 					PType expected_type = lookup_type(pfunction.arg_types[i]);
 					PType actual_type = lookup_type(result.arg_types[i]);
 					if (actual_type != expected_type) {
-						set_error(node, "redefinition of function with parameter mis-match \
-						          at param %d", i);
+						set_error(node, "redefinition of function with parameter mis-match "
+						          "at param %d", i);
 						break;
 					}
 				}
@@ -472,7 +503,6 @@ PFunction CodeGenerator::generate_function(ASTNode *node) {
 			result = function;
 			verifyFunction(*function.value);
 			fpm->run(*function.value);
-
 			break;
 		}
 		default:
