@@ -22,10 +22,10 @@ private:
 	void set_environment(ASTNode *node,
 	                     Environment *parent,
 	                     char *current_function = NULL);
-	bool eof();
-	bool peek_token_type(PTokenType type);
-	bool peek_token(PTokenType type, const char *value);
-	bool peek_type();
+	bool eof(int offset = 0);
+	bool peek_token_type(PTokenType type, int offset = 0);
+	bool peek_token(PTokenType type, const char *value, int offset = 0);
+	bool peek_type(int offset = 0);
 	bool peek_unary_operator();
 	bool peek_binary_operator();
 	ASTNode *create_node(ASTNodeType type);

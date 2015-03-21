@@ -43,16 +43,16 @@ void Parser::set_environment(ASTNode *node,
 	}
 }
 
-bool Parser::eof() {
-	return cursor >= (tokens + token_count);
+bool Parser::eof(int offset) {
+	return (cursor + offset) >= (tokens + token_count);
 }
 
-bool Parser::peek_token_type(PTokenType type) {
-	return !eof() && cursor[0].type == type;
+bool Parser::peek_token_type(PTokenType type, int offset) {
+	return !eof(offset) && cursor[offset].type == type;
 }
 
-bool Parser::peek_token(PTokenType type, const char *value) {
-	return peek_token_type(type) && !strcmp(cursor[0].value, value);
+bool Parser::peek_token(PTokenType type, const char *value, int offset) {
+	return peek_token_type(type, offset) && !strcmp(cursor[offset].value, value);
 }
 
 PToken *Parser::scan_token_type(PTokenType type) {
@@ -120,14 +120,17 @@ ASTNode *Parser::parse_type() {
 	return result;
 }
 
-bool Parser::peek_type() {
-	return peek_token_type(TOKEN_IDENTIFIER)
-	    && search_for_type(*env, cursor->value) != NULL;
+bool Parser::peek_type(int offset) {
+	return peek_token_type(TOKEN_IDENTIFIER, offset)
+	    && search_for_type(*env, cursor[offset].value) != NULL;
 }
 
 bool Parser::peek_unary_operator() {
-	return peek_token_type(TOKEN_OPERATOR)
-	    && unary_operators[cursor[0].value];
+	return (peek_token_type(TOKEN_OPERATOR)
+		  && unary_operators[cursor[0].value])
+	    || (peek_token(TOKEN_RESERVED_PUNCTUATION, "(")
+	    && peek_type(1)
+	    && peek_token(TOKEN_RESERVED_PUNCTUATION, ")", 2));
 }
 
 bool Parser::peek_binary_operator() {
@@ -149,9 +152,17 @@ ASTNode *Parser::parse_unary_operator() {
 	ASTNode *result = NULL;
 
 	if (peek_unary_operator()) {
-		PToken *op = scan_token_type(TOKEN_OPERATOR);
-		result = create_node(NODE_UNARY_OPERATOR);
-		result->data.string.value = op->value;
+		if (peek_token_type(TOKEN_OPERATOR)) {
+			PToken *op = scan_token_type(TOKEN_OPERATOR);
+			result = create_node(NODE_UNARY_OPERATOR);
+			result->data.unary_operator.value = op->value;
+		} else { // It must be a cast!
+			assert(scan_token(TOKEN_RESERVED_PUNCTUATION, "("));
+			ASTNode *type = parse_type();
+			assert(scan_token(TOKEN_RESERVED_PUNCTUATION, ")"));
+			result = create_node(NODE_CAST_OPERATOR);
+			result->data.unary_operator.value = type->data.string.value;
+		}
 	}
 
 	return result;
@@ -322,7 +333,7 @@ ASTNode *Parser::parse_block() {
 		return NULL;
 
 	if (!scan_token(TOKEN_RESERVED_PUNCTUATION, "}")) {
-		set_error("expected closing brace after block");
+		set_error("unexpected symbol in block - '%s'", cursor[0].value);
 		return NULL;
 	}
 	env = prev_env;

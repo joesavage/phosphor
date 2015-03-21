@@ -80,21 +80,45 @@ bool CodeGenerator::implicit_type_convert(PValue *source, char *dest_typename) {
 		return true;
 
 	if (!strncmp(source->type, "int", 3)) {
-		// TODO: Use 'numbits' and other state to determine whether we /really/ want
-		// to cast here. We probably don't want to truncate implicitly like this.
-		// Plus, we could easily create the cast instructions manually rather than
-		// relying on 'getCastOpcode' here if required (Trunc, ZExt/SExt, etc.).
-		if (CastInst::isCastable(source_type.type, dest_type.type)) {
-			source->type = dest_typename;
-			auto cast_opcode = CastInst::getCastOpcode(source->value,
-			                                           source_type.is_signed,
-			                                           dest_type.type,
-			                                           dest_type.is_signed);
-			source->value = builder->CreateCast(cast_opcode,
-			                                    source->value,
-			                                    dest_type.type);
-			return true;
+		// TODO: What about signed/unsigned conversion?
+		if (source_type.numbits <= dest_type.numbits) {
+			// We could easily create the cast instructions manually rather than
+			// relying on 'getCastOpcode' here if required (Trunc, ZExt/SExt, etc.).
+			if (CastInst::isCastable(source_type.type, dest_type.type)) {
+				source->type = dest_typename;
+				auto cast_opcode = CastInst::getCastOpcode(source->value,
+				                                           source_type.is_signed,
+				                                           dest_type.type,
+				                                           dest_type.is_signed);
+				source->value = builder->CreateCast(cast_opcode,
+				                                    source->value,
+				                                    dest_type.type);
+				return true;
+			}
 		}
+	}
+
+	return false;
+}
+
+bool CodeGenerator::explicit_type_convert(PValue *source, char *dest_typename) {
+	PType source_type = lookup_type(source->type);
+	PType dest_type = lookup_type(dest_typename);
+	if (source_type == dest_type)
+		return true;
+
+	// For now, we'll just do any casts that LLVM thinks we can do.
+	// Think about this more in future (incl. bitcasts, etc.).
+	if (CastInst::isCastable(source_type.type, dest_type.type)) {
+		source->type = dest_typename;
+		auto cast_opcode = CastInst::getCastOpcode(source->value,
+		                                           source_type.is_signed,
+		                                           dest_type.type,
+		                                           dest_type.is_signed);
+		source->value = builder->CreateCast(cast_opcode,
+		                                    source->value,
+		                                    dest_type.type);
+		return true;
 	}
 
 	return false;
@@ -153,11 +177,12 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 					break;
 
 				if (!implicit_type_convert(&value, var_sym.type)) {
-					set_error(pnode.right, "type mismatch in assignment");
+					set_error(pnode.right, "type mismatch in assignment - expected '%s', got '%s'", var_sym.type, value.type);
 					break;
 				}
 
 				builder->CreateStore(value.value, var_sym.value);
+				result.type = value.type;
 				result.value = value.value;
 				break;
 			}
@@ -199,8 +224,26 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 				// TODO: Handle unsigned
 				result.value = builder->CreateSDiv(left.value, right.value, "divtmp");
 			} else if (!strcmp(pnode.value, "-")) {
+				// TODO: What if we have an unsigned type here? I guess we perform an
+				// implicit type conversion?
 				result.value = builder->CreateSub(left.value, right.value, "subtmp");
 			}
+			break;
+		}
+		case NODE_CAST_OPERATOR:
+		{
+			DECL_ASTNODE_DATA(node, unary_operator, pnode);
+			PValue value = generate_expression(pnode.operand);
+			if (error)
+				break;
+			if (!explicit_type_convert(&value, pnode.value)) {
+				set_error(node, "failed to convert type '%s' to '%s'",
+				          value.type, pnode.value);
+				break;
+			}
+
+			result.type = value.type;
+			result.value = value.value;
 			break;
 		}
 		case NODE_FUNCTION_CALL:
@@ -247,8 +290,9 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 		}
 		case NODE_CONSTANT_INT:
 		{
-			// TODO: Types aren't 32-bit by default for any reason right now.
-			// Just an arbitrary decision that needs reviewing in future.
+			// TODO: We should create a value with a type reflecting the smallest
+			// standard int size the value fits in. That way, the value can be
+			// implicitly casted up to larger types if it needs to be.
 			//
 			// TODO: If we want an int literal max size instead of just wrapping,
 			// we should add that here.
@@ -568,6 +612,7 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 
 			// TODO: Type check! How to know the function we currently reside in?
 			// I guess the current 'env' should hold this information?
+			// TODO: Implicit type conversion
 			builder->CreateRet(val.value);
 			break;
 		}

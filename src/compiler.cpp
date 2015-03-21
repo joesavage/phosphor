@@ -65,6 +65,13 @@ static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 				printf_ast(pdata.operand, "OPERAND", depth + 1);
 				break;
 			}
+			case NODE_CAST_OPERATOR:
+			{
+				DECL_ASTNODE_DATA(node, unary_operator, pdata);
+				printf("CAST<%s>\n", pdata.value);
+				printf_ast(pdata.operand, "OPERAND", depth + 1);
+				break;	
+			}
 			case NODE_BINARY_OPERATOR:
 			{
 				DECL_ASTNODE_DATA(node, binary_operator, pdata);

@@ -49,6 +49,7 @@ void initialise_node(ASTNode *node, ASTNodeType type) {
 		case NODE_RETURN:
 			break;
 		case NODE_UNARY_OPERATOR:
+		case NODE_CAST_OPERATOR:
 			node->data.unary_operator.value = NULL;
 			node->data.unary_operator.operand = NULL;
 			break;
