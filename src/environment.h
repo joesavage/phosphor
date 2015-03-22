@@ -14,24 +14,33 @@ using namespace llvm;
 struct PType {
 	Type *type;
 
-	// TODO: Switch to type-specific bitmask flags?
+	// TODO: Switch to bitmask flags?
+	bool is_numeric;
 	bool is_signed;
+	bool is_float;
 	size_t numbits;
 
 	PType() {
 		type = NULL;
+		is_numeric = false;
 		is_signed = false;
+		is_float = false;
 		numbits = 0;
 	}
 
-	PType(Type *type, bool is_signed = false, size_t numbits = 0) {
+	PType(Type *type, size_t numbits = 0, bool is_numeric = false,
+	      bool is_float = false, bool is_signed = false) {
 		this->type = type;
+		this->is_numeric = is_numeric;
+		this->is_float = is_float;
 		this->is_signed = is_signed;
 		this->numbits = numbits;
 	}
 
 	bool operator==(const PType &ty) {
 		return ty.type == type
+		    && ty.is_numeric == is_numeric
+		    && ty.is_float == is_float
 		    && ty.is_signed == is_signed
 		    && ty.numbits == numbits;
 	}

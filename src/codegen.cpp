@@ -79,23 +79,25 @@ bool CodeGenerator::implicit_type_convert(PValue *source, char *dest_typename) {
 	if (source_type == dest_type)
 		return true;
 
-	if (!strncmp(source->type, "uint", 4) || !strncmp(source->type, "int", 3)) {
-		// TODO: What about signed/unsigned conversion? This comparison clearly
-		// needs modifying!
-		if (source_type.numbits <= dest_type.numbits) {
-			// We could easily create the cast instructions manually rather than
-			// relying on 'getCastOpcode' here if required (Trunc, ZExt/SExt, etc.).
-			if (CastInst::isCastable(source_type.type, dest_type.type)) {
-				source->type = dest_typename;
-				auto cast_opcode = CastInst::getCastOpcode(source->value,
-				                                           source_type.is_signed,
-				                                           dest_type.type,
-				                                           dest_type.is_signed);
-				source->value = builder->CreateCast(cast_opcode,
-				                                    source->value,
-				                                    dest_type.type);
-				return true;
-			}
+	// TODO: What about signed/unsigned conversion? We might not want to cast
+	// those implicitly, or if we do we at least care more about the 'numbits'
+	// values than this comparison makes out. Need to handle this case!
+	// TODO: What about conversion from uint64 to float/double? The numbits
+	// comparison doesn't hold up here either!
+	if (source_type.is_numeric && dest_type.is_numeric
+	 && source_type.numbits <= dest_type.numbits) {
+		// We could easily create the cast instructions manually rather than
+		// relying on 'getCastOpcode' here if required (Trunc, ZExt/SExt, etc.).
+		if (CastInst::isCastable(source_type.type, dest_type.type)) {
+			source->type = dest_typename;
+			auto cast_opcode = CastInst::getCastOpcode(source->value,
+			                                           source_type.is_signed,
+			                                           dest_type.type,
+			                                           dest_type.is_signed);
+			source->value = builder->CreateCast(cast_opcode,
+			                                    source->value,
+			                                    dest_type.type);
+			return true;
 		}
 	}
 
@@ -166,6 +168,7 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 		{
 			DECL_ASTNODE_DATA(node, binary_operator, pnode);
 
+			// TODO: Handle other operators (+=, etc.)
 			if (!strcmp(pnode.value, "=")) {
 				DECL_ASTNODE_DATA(pnode.left, string, symbol_name);
 				PVariable var_sym = lookup_symbol(symbol_name.value);
@@ -197,42 +200,74 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 			if (error)
 				break;
 
-			if (lookup_type(left) != lookup_type(right)) {
-				set_error(pnode.right, "type mismatch in addition operation - expected "
+			// TODO: Implicit type conversion here. Need to consider which operand
+			// to convert from/to (presumably convert to the larger one?), OR maybe
+			// we don't even want integer promotion in the language at all. I'm
+			// unsure of the best solution right now.
+			PType type = lookup_type(left);
+			if (lookup_type(right) != type) {
+				set_error(pnode.right, "type mismatch in binary operation - expected "
 				          "'%s', got '%s'", left.type, right.type);
 				break;
 			}
 
-			// Right now, we only have hardcoded support for (32-bit) integers.
-			//
-			// TODO: Implicit type conversion here. Need to consider which operand
-			// to convert from/to (presumably convert to the larger one?).
-			if (lookup_type(left).type != IntegerType::get(getGlobalContext(), 32)) {
-				set_error(pnode.right, "unsupported type for binary operation");
+			if (!type.is_numeric) {
+				set_error(pnode.right,
+				          "non-numeric type '%s' specified for binary operation",
+				          left.type);
 				break;
 			}
 
+			// TODO: Handle other operators (>=, etc.)
+			// NOTE: We use 'ordered' floating point comparisons below. I think this
+			// is the correct decision here, but I'm not entirely sure. Check!
 			result.type = left.type;
 			if (!strcmp(pnode.value, "==")) {
 				result.type = "bool";
-				result.value = builder->CreateICmpEQ(left.value, right.value, "eqtmp");
+				if (type.is_float)
+					result.value = builder->CreateFCmpOEQ(left.value,
+					                                      right.value, "eqtmp");
+				else
+					result.value = builder->CreateICmpEQ(left.value,
+					                                     right.value, "eqtmp");
 			} else if (!strcmp(pnode.value, "!=")) {
 				result.type = "bool";
-				result.value = builder->CreateICmpNE(left.value, right.value, "neqtmp");
+				if (type.is_float)
+					result.value = builder->CreateFCmpONE(left.value,
+					                                      right.value, "neqtmp");
+				else
+					result.value = builder->CreateICmpNE(left.value,
+					                                     right.value, "neqtmp");
 			} else if (!strcmp(pnode.value, "+")) {
-				result.value = builder->CreateAdd(left.value, right.value, "addtmp");
+				if (type.is_float)
+					result.value = builder->CreateFAdd(left.value, right.value, "addtmp");
+				else
+					result.value = builder->CreateAdd(left.value, right.value, "addtmp");
 			} else if (!strcmp(pnode.value, "*")) {
-				result.value = builder->CreateMul(left.value, right.value, "multmp");
+				if (type.is_float)
+					result.value = builder->CreateFMul(left.value, right.value, "multmp");
+				else
+					result.value = builder->CreateMul(left.value, right.value, "multmp");
 			} else if (!strcmp(pnode.value, "/")) {
-				// TODO: Handle unsigned
-				result.value = builder->CreateSDiv(left.value, right.value, "divtmp");
+				if (type.is_float)
+					result.value = builder->CreateFDiv(left.value, right.value, "divtmp");
+				else if (type.is_signed)
+					result.value = builder->CreateSDiv(left.value, right.value, "divtmp");
+				else
+					result.value = builder->CreateUDiv(left.value, right.value, "divtmp");
 			} else if (!strcmp(pnode.value, "-")) {
-				// TODO: What if we have an unsigned type here? I guess we perform an
-				// implicit type conversion?
-				result.value = builder->CreateSub(left.value, right.value, "subtmp");
+				if (type.is_float)
+					result.value = builder->CreateFSub(left.value, right.value, "subtmp");
+				else
+					result.value = builder->CreateSub(left.value, right.value, "subtmp");
 			}
 			break;
 		}
+		// case NODE_UNARY_OPERATOR:
+		// 	// TODO: What if we have an unsigned type negated by a unary operator?
+		// 	// I guess we perform an implicit type conversion?
+		//
+		// 	break;
 		case NODE_CAST_OPERATOR:
 		{
 			DECL_ASTNODE_DATA(node, unary_operator, pnode);
@@ -278,7 +313,7 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 					set_error(node, "function parameter mis-match at param %d", i);
 					break;
 				}
-				// assert(!strcmp(arg.type, pfunction.arg_types[i]));
+				assert(!strcmp(arg.type, pfunction.arg_types[i]));
 				args.add(arg.value);
 			}
 			if (error)
@@ -293,9 +328,6 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 		}
 		case NODE_CONSTANT_INT:
 		{
-			// TODO: If we want an int literal max size instead of just wrapping,
-			// we should add that here.
-			//
 			// TODO: Need to deal with hex, etc.
 			DECL_ASTNODE_DATA(node, string, pnode);
 			char *endptr = pnode.value;
@@ -351,7 +383,7 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 			// TODO: Also, we probably want to deal with oversized floats or whatever
 			// here.
 			DECL_ASTNODE_DATA(node, string, pnode);
-			result.type = "float32";
+			result.type = "float64";
 			APFloat number(0.0);
 			number.convertFromString(pnode.value, APFloat::rmNearestTiesToEven);
 			result.value = ConstantFP::get(getGlobalContext(), number);

@@ -1,9 +1,7 @@
 fn putchar(int32 ch) -> int32;
 
 fn main() -> int32 {
-	uint64 a = 5;
-	int16 b = (int16)a;
-	int32 c = b;
+	float64 a = 5.0;
 
-	return c + 2;
+	return a / 4.0;
 }
