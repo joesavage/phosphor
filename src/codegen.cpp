@@ -82,13 +82,16 @@ bool CodeGenerator::implicit_type_convert(PValue *source, char *dest_typename) {
 	if (source_type.is_numeric && dest_type.is_numeric) {
 		// TODO: Consider whether integer to float implicit conversion is a good
 		// idea or not.
-		if ((((source_type.is_signed == dest_type.is_signed)
+		// TODO: This big unwieldy condition can probably be simplified down!
+		if ((((source_type.is_signed == dest_type.is_signed
+		 && (!source_type.is_float))
 		 || (source_type.is_float && dest_type.is_float))
 		 && ((source_type.numbits <= dest_type.numbits)
 		 || (!source_type.is_float && dest_type.is_float)))
 
 		 // NOTE: unsigned->signed conversions are allowed if there is no possible
 		 // truncation. implicit signed->unsigned conversions are disallowed.
+		 // TODO: Should we be more relaxed with this check? I'm unsure.
 		 || ((!source_type.is_signed && dest_type.is_signed)
 		 && (dest_type.numbits - 1 >= source_type.numbits))) {
 			// We could easily create the cast instructions manually rather than
@@ -685,9 +688,14 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 				val.value = NULL;
 			}
 
-			// TODO: Type check! How to know the function we currently reside in?
-			// I guess the current 'env' should hold this information?
-			// TODO: Implicit type conversion
+			PFunction function = lookup_function(env->current_function);
+			if (!implicit_type_convert(&val, function.return_type)) {
+				set_error(pnode.operand,
+				          "type mismatch in return statement - expected '%s', got '%s'",
+				          function.return_type, val.type);
+				break;
+			}
+
 			builder->CreateRet(val.value);
 			break;
 		}

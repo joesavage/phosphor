@@ -5,6 +5,7 @@ fn main() -> int32 {
 	int32 b = a;
 	float32 c = b;
 	float64 d = c;
+	uint16 e = (uint8)d;
 
-	return c + d;
+	return e;
 }
