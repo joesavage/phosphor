@@ -79,25 +79,31 @@ bool CodeGenerator::implicit_type_convert(PValue *source, char *dest_typename) {
 	if (source_type == dest_type)
 		return true;
 
-	// TODO: What about signed/unsigned conversion? We might not want to cast
-	// those implicitly, or if we do we at least care more about the 'numbits'
-	// values than this comparison makes out. Need to handle this case!
-	// TODO: What about conversion from uint64 to float/double? The numbits
-	// comparison doesn't hold up here either!
-	if (source_type.is_numeric && dest_type.is_numeric
-	 && source_type.numbits <= dest_type.numbits) {
-		// We could easily create the cast instructions manually rather than
-		// relying on 'getCastOpcode' here if required (Trunc, ZExt/SExt, etc.).
-		if (CastInst::isCastable(source_type.type, dest_type.type)) {
-			source->type = dest_typename;
-			auto cast_opcode = CastInst::getCastOpcode(source->value,
-			                                           source_type.is_signed,
-			                                           dest_type.type,
-			                                           dest_type.is_signed);
-			source->value = builder->CreateCast(cast_opcode,
-			                                    source->value,
-			                                    dest_type.type);
-			return true;
+	if (source_type.is_numeric && dest_type.is_numeric) {
+		// TODO: Consider whether integer to float implicit conversion is a good
+		// idea or not.
+		if ((((source_type.is_signed == dest_type.is_signed)
+		 || (source_type.is_float && dest_type.is_float))
+		 && ((source_type.numbits <= dest_type.numbits)
+		 || (!source_type.is_float && dest_type.is_float)))
+
+		 // NOTE: unsigned->signed conversions are allowed if there is no possible
+		 // truncation. implicit signed->unsigned conversions are disallowed.
+		 || ((!source_type.is_signed && dest_type.is_signed)
+		 && (dest_type.numbits - 1 >= source_type.numbits))) {
+			// We could easily create the cast instructions manually rather than
+			// relying on 'getCastOpcode' here if required (Trunc, ZExt/SExt, etc.).
+			if (CastInst::isCastable(source_type.type, dest_type.type)) {
+				source->type = dest_typename;
+				auto cast_opcode = CastInst::getCastOpcode(source->value,
+				                                           source_type.is_signed,
+				                                           dest_type.type,
+				                                           dest_type.is_signed);
+				source->value = builder->CreateCast(cast_opcode,
+				                                    source->value,
+				                                    dest_type.type);
+				return true;
+			}
 		}
 	}
 
@@ -200,17 +206,24 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 			if (error)
 				break;
 
-			// TODO: Implicit type conversion here. Need to consider which operand
-			// to convert from/to (presumably convert to the larger one?), OR maybe
-			// we don't even want integer promotion in the language at all. I'm
-			// unsure of the best solution right now.
-			PType type = lookup_type(left);
-			if (lookup_type(right) != type) {
+			// TODO: Ensure these binop cast rules are sensible at some point.
+			PType left_type = lookup_type(left);
+			PType right_type = lookup_type(right);
+			bool cast_left = (!left_type.is_signed && right_type.is_signed)
+			              || (left_type.numbits < right_type.numbits);
+			bool cast_success = false;
+			if (cast_left)
+				cast_success = implicit_type_convert(&left, right.type);
+			else
+				cast_success = implicit_type_convert(&right, left.type);
+
+			if (!cast_success) {
 				set_error(pnode.right, "type mismatch in binary operation - expected "
 				          "'%s', got '%s'", left.type, right.type);
 				break;
 			}
 
+			PType type = lookup_type(left);
 			if (!type.is_numeric) {
 				set_error(pnode.right,
 				          "non-numeric type '%s' specified for binary operation",
