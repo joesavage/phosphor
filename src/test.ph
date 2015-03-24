@@ -1,8 +1,11 @@
 fn putchar(int32 ch) -> int32;
 
 fn main() -> int32 {
-	let a = 5.0;
-	let b = (int16)a;
-
-	return b;
+	int32 a = 5;
+	float32 b = a;
+	if (a == b) {
+		return 3;
+	}
+	
+	return 5;
 }

@@ -57,7 +57,8 @@ PVariable CodeGenerator::lookup_symbol(char *name) {
 PValue CodeGenerator::get_boolean_value(bool value) {
 	PValue result;
 	result.type = "bool";
-	result.value = ConstantInt::get(getGlobalContext(), APInt(value ? 1 : 0, 0));
+	result.value = ConstantInt::get(getGlobalContext(),
+	                                APInt(lookup_type("bool").numbits, value));
 	return result;
 }
 
@@ -231,7 +232,8 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 			PType left_type = lookup_type(left);
 			PType right_type = lookup_type(right);
 			bool cast_left = (!left_type.is_signed && right_type.is_signed)
-			              || (left_type.numbits < right_type.numbits);
+			              || (left_type.numbits < right_type.numbits)
+			              || (right_type.is_float);
 			bool cast_success = false;
 			if (cast_left)
 				cast_success = implicit_type_convert(&left, right.type);
@@ -405,10 +407,8 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 		case NODE_CONSTANT_BOOL:
 		{
 			DECL_ASTNODE_DATA(node, integer, pnode);
+			result = get_boolean_value(pnode.value);
 			result.type = "bool";
-			result.value = ConstantInt::get(getGlobalContext(),
-			                                APInt(lookup_type("bool").numbits,
-			                                      pnode.value));
 			break;
 		}
 		case NODE_CONSTANT_FLOAT:
@@ -622,12 +622,13 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 				break;
 			if (lookup_type(cond) != lookup_type("bool")) {
 				set_error(pnode.condition,
-				          "unsupported type for if statement condition");
+				          "unsupported type for if statement condition: '%s'",
+				          cond.type);
 				break;
 			}
 
 			PValue true_val = get_boolean_value(true);
-			cond.value = builder->CreateICmpNE(cond.value, true_val.value, "ifcond");
+			cond.value = builder->CreateICmpEQ(cond.value, true_val.value, "ifcond");
 
 			Function *function;
 			BasicBlock *then, *otherwise, *merge;
@@ -674,13 +675,13 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 
 			if (lookup_type(cond) != lookup_type("bool")) {
 				set_error(pnode.condition,
-				          "unsupported type for while statement condition");
+				          "unsupported type for while statement condition: %s",
+				          cond.type);
 				break;
 			}
 
-			cond.value = builder->CreateICmpNE(cond.value,
-			                                   ConstantInt::get(getGlobalContext(),
-			                                                    APInt(1, 0)),
+			cond.value = builder->CreateICmpEQ(cond.value,
+			                                   get_boolean_value(true).value,
 			                                   "whilecond");
 			builder->CreateCondBr(cond.value, loop, after);
 

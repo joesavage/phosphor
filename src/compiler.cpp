@@ -211,8 +211,8 @@ int main() {
 	type_table.size = 64;
 	function_table.size = 32;
 
-	type_table.set("void", PType(Type::getVoidTy(getGlobalContext())));
-	type_table.set("bool", PType(Type::getInt1Ty(getGlobalContext())));
+	type_table.set("void", PType(Type::getVoidTy(getGlobalContext()), 0));
+	type_table.set("bool", PType(Type::getInt1Ty(getGlobalContext()), 1));
 	type_table.set("int8", PType(Type::getInt8Ty(getGlobalContext()), 8, true, false, true));
 	type_table.set("int16", PType(Type::getInt16Ty(getGlobalContext()), 16, true, false, true));
 	type_table.set("int32", PType(Type::getInt32Ty(getGlobalContext()), 32, true, false, true));
