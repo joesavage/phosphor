@@ -8,8 +8,6 @@
 #include "lex.h"
 #include "helpers.h"
 
-// NOTE: We should probably do the decoding of values (e.g. numbers) here
-
 // NOTE: The errors in here need improving.
 
 static int isoctal(int ch) {

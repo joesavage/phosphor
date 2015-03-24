@@ -144,21 +144,39 @@ PVariable CodeGenerator::generate_variable_declaration(ASTNode *node) {
 		{
 			DECL_ASTNODE_DATA(node, variable_declaration, pnode);
 			char *variable_name = pnode.name->data.string.value;
-			char *variable_type_name = pnode.type->data.string.value;
-			PType variable_type = lookup_type(variable_type_name);
+			char *variable_type_name = NULL;
+			if (pnode.type)
+				variable_type_name = pnode.type->data.string.value;
+			assert(variable_type_name || pnode.init);
 			if (env->symbol_table.exists(variable_name)) {
-				set_error(pnode.type, "variable naming conflict");
+				set_error(pnode.name, "variable naming conflict");
 				break;
 			}
 
+			PValue value;
+			if (pnode.init) {
+				value = generate_expression(pnode.init);
+				if (error) {
+					break;
+				} else if (variable_type_name) {
+					assert(implicit_type_convert(&value, variable_type_name));
+				} else { // Type inference
+					// TODO: Do we really want small int literals to type infer to uint8?
+					// That seems kinda dumb, as I suspect people will expect (u?)int32.
+					result.type = value.type;
+				}
+			}
+			if (variable_type_name)
+				result.type = variable_type_name;
+
 			// alloca at the entry block so that the mem2reg pass can hit
-			result.type = variable_type_name;
+			PType variable_type = lookup_type(result.type);
 			result.value = create_entry_block_alloca(variable_name,
 			                                         variable_type.type);
 			env->symbol_table.set(variable_name, result);
 
-			if (pnode.action)
-				generate_statement(pnode.action);
+			if (pnode.init)
+				builder->CreateStore(value.value, result.value);
 			break;
 		}
 		default:

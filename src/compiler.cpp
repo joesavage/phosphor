@@ -55,7 +55,7 @@ static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 				printf("VARDECL\n");
 				printf_ast(pdata.type, "TYPE", depth + 1);
 				printf_ast(pdata.name, "NAME", depth + 1);
-				printf_ast(pdata.action, "ACTION", depth + 1);
+				printf_ast(pdata.init, "INIT", depth + 1);
 				break;
 			}
 			case NODE_UNARY_OPERATOR:

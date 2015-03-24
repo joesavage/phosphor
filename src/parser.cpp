@@ -292,7 +292,8 @@ ASTNode *Parser::parse_expression(unsigned char minimum_precedence) {
 ASTNode *Parser::parse_variable_declaration() {
 	ASTNode *result = create_node(NODE_VARIABLE_DECLARATION);
 
-	result->data.variable_declaration.type = parse_type();
+	if (!scan_token(TOKEN_KEYWORD, "let"))
+		result->data.variable_declaration.type = parse_type();
 
 	// TODO: Handle modifiers.
 
@@ -306,12 +307,7 @@ ASTNode *Parser::parse_variable_declaration() {
 
 	// Handle assignment after declaration syntax (i.e. 'int32 a = 5')
 	if (scan_token(TOKEN_OPERATOR, "=")) {
-		ASTNode *op = create_node(NODE_BINARY_OPERATOR);
-		op->data.string.value = "=";
-		op->data.binary_operator.left = result->data.variable_declaration.name;
-		op->data.binary_operator.right = parse_expression();
-
-		result->data.variable_declaration.action = op;
+		result->data.variable_declaration.init = parse_expression();
 	}
 
 	return result;
@@ -472,7 +468,7 @@ ASTNode *Parser::parse_return() {
 
 // Predictive recursive descent parsing of a single statement
 ASTNode *Parser::parse_statement() {
-	if (peek_type()) { // TODO: Handle 'let' type inference
+	if (peek_type() || peek_token(TOKEN_KEYWORD, "let")) {
 		return parse_variable_declaration();
 	} else if (peek_token(TOKEN_KEYWORD, "fn")) {
 		return parse_function();

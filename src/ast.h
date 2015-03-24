@@ -70,7 +70,8 @@ struct ASTNode {
 		struct variable_declaration {
 			ASTNode *type;
 			ASTNode *name;
-			ASTNode *action;
+			ASTNode *init;
+			// TODO: Variable modifiers
 		} variable_declaration;
 		struct conditional {
 			ASTNode *condition;
@@ -82,10 +83,11 @@ struct ASTNode {
 			ASTNode *body;
 		} function;
 		struct function_signature {
-			ASTNode *name; // TODO: Think about this unnecessary indirection.
+			ASTNode *name;
 			ASTNode *type;
 			MemoryList<ASTNode *> args;
 			Environment *env;
+			// TODO: Function modifiers
 		} function_signature;
 		struct function_call {
 			ASTNode *name;

@@ -19,7 +19,7 @@ void initialise_node(ASTNode *node, ASTNodeType type) {
 		case NODE_VARIABLE_DECLARATION:
 			node->data.variable_declaration.type = NULL;
 			node->data.variable_declaration.name = NULL;
-			node->data.variable_declaration.action = NULL;
+			node->data.variable_declaration.init = NULL;
 			break;
 		case NODE_IF:
 		case NODE_DO_LOOP:
