@@ -17,7 +17,7 @@ void initialise_node(ASTNode *node, ASTNodeType type) {
 			node->data.block.env = NULL;
 			break;
 		case NODE_VARIABLE_DECLARATION:
-			node->data.variable_declaration.type = NULL;
+			node->data.variable_declaration.type = PExType();
 			node->data.variable_declaration.name = NULL;
 			node->data.variable_declaration.init = NULL;
 			break;
@@ -35,7 +35,7 @@ void initialise_node(ASTNode *node, ASTNodeType type) {
 			break;
 		case NODE_FUNCTION_SIGNATURE:
 			node->data.function_signature.name = NULL;
-			node->data.function_signature.type = NULL;
+			node->data.function_signature.type = PExType();
 			node->data.function_signature.args = MemoryList<ASTNode *>();
 			node->data.function_signature.env = NULL;
 			break;
@@ -48,8 +48,11 @@ void initialise_node(ASTNode *node, ASTNodeType type) {
 		case NODE_CONTINUE:
 		case NODE_RETURN:
 			break;
-		case NODE_UNARY_OPERATOR:
 		case NODE_CAST_OPERATOR:
+			node->data.cast_operator.type = PExType();
+			node->data.cast_operator.operand = NULL;
+			break;
+		case NODE_UNARY_OPERATOR:
 			node->data.unary_operator.value = NULL;
 			node->data.unary_operator.operand = NULL;
 			break;
@@ -61,8 +64,10 @@ void initialise_node(ASTNode *node, ASTNodeType type) {
 		case NODE_CONSTANT_BOOL:
 			node->data.integer.value = 0;
 			break;
-		case NODE_IDENTIFIER:
 		case NODE_TYPE:
+			node->data.type.value = PExType();
+			break;
+		case NODE_IDENTIFIER:
 		case NODE_CONSTANT_INT:
 		case NODE_CONSTANT_FLOAT:
 		case NODE_CONSTANT_STRING:

@@ -53,7 +53,9 @@ static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 			{
 				DECL_ASTNODE_DATA(node, variable_declaration, pdata);
 				printf("VARDECL\n");
-				printf_ast(pdata.type, "TYPE", depth + 1);
+				for (size_t i = 0; i < depth; ++i)
+					printf("   ");
+				printf("TYPE<%s>\n", pdata.type.to_string());
 				printf_ast(pdata.name, "NAME", depth + 1);
 				printf_ast(pdata.init, "INIT", depth + 1);
 				break;
@@ -67,8 +69,8 @@ static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 			}
 			case NODE_CAST_OPERATOR:
 			{
-				DECL_ASTNODE_DATA(node, unary_operator, pdata);
-				printf("CAST<%s>\n", pdata.value);
+				DECL_ASTNODE_DATA(node, cast_operator, pdata);
+				printf("CAST<%s>\n", pdata.type.to_string());
 				printf_ast(pdata.operand, "OPERAND", depth + 1);
 				break;	
 			}
@@ -86,6 +88,11 @@ static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 				break;
 			}
 			case NODE_TYPE:
+			{
+				DECL_ASTNODE_DATA(node, type, pdata);
+				printf("TYPE<%s>\n", pdata.value.to_string());
+				break;
+			}
 			case NODE_IDENTIFIER:
 			case NODE_CONSTANT_INT:
 			case NODE_CONSTANT_FLOAT:
@@ -107,7 +114,9 @@ static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 				DECL_ASTNODE_DATA(node, function_signature, pdata);
 				printf("FUNCTION_SIG\n");
 				printf_ast(pdata.name, "NAME", depth + 1);
-				printf_ast(pdata.type, "TYPE", depth + 1);
+				for (size_t i = 0; i < depth; ++i)
+					printf("   ");
+				printf("TYPE<%s>\n", pdata.type.to_string());
 				for (size_t i = 0; i < pdata.args.size(); ++i)
 					printf_ast(pdata.args[i], "ARGS", depth + 1);
 				break;

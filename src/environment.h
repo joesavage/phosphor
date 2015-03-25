@@ -12,7 +12,7 @@
 using namespace llvm;
 
 struct PType {
-	Type *type;
+	Type *llvmty;
 
 	// TODO: Switch to bitmask flags?
 	bool is_numeric;
@@ -21,16 +21,16 @@ struct PType {
 	size_t numbits;
 
 	PType() {
-		type = NULL;
+		llvmty = NULL;
 		is_numeric = false;
 		is_signed = false;
 		is_float = false;
 		numbits = 0;
 	}
 
-	PType(Type *type, size_t numbits = 0, bool is_numeric = false,
+	PType(Type *llvmty, size_t numbits = 0, bool is_numeric = false,
 	      bool is_float = false, bool is_signed = false) {
-		this->type = type;
+		this->llvmty = llvmty;
 		this->is_numeric = is_numeric;
 		this->is_float = is_float;
 		this->is_signed = is_signed;
@@ -38,7 +38,7 @@ struct PType {
 	}
 
 	bool operator==(const PType &ty) {
-		return ty.type == type
+		return ty.llvmty == llvmty
 		    && ty.is_numeric == is_numeric
 		    && ty.is_float == is_float
 		    && ty.is_signed == is_signed
@@ -47,52 +47,88 @@ struct PType {
 	bool operator!=(const PType &ty) { return !(*this == ty); }
 };
 
+struct PExType {
+	char *type_name;
+	bool is_pointer;
+	// TODO: Other modifiers (possibly bitflag all modifiers in future)
+
+	PExType(char *type_name = NULL, bool is_pointer = false) {
+		this->type_name = type_name;
+		this->is_pointer = is_pointer;
+	}
+
+	inline bool is_set() {
+		return type_name;
+	}
+
+	char *to_string() {
+		if (!type_name)
+			return NULL;
+
+		size_t buf_len = 255;
+		char *result = (char *)heap_alloc(buf_len);
+		strncpy(result, type_name, buf_len);
+		if (is_pointer)
+			strncpy(result + strlen(type_name), "^", buf_len);
+
+		// Can handle other modifiers here
+
+		return result;
+	}
+
+	bool operator==(const PExType &ty) {
+		return !strcmp(ty.type_name, type_name)
+		    && ty.is_pointer == is_pointer;
+	}
+	bool operator!=(const PExType &ty) { return !(*this == ty); }
+};
+
 
 struct PValue {
-	char *type;
-	Value *value;
+	PExType type;
+	Value *llvmval;
 
 	PValue() {
 		type = NULL;
-		value = NULL;
+		llvmval = NULL;
 	}
 
-	PValue(char *type, Value *value) {
+	PValue(PExType type, Value *llvmval) {
 		this->type = type;
-		this->value = value;
+		this->llvmval = llvmval;
 	}
 };
 
 struct PVariable {
-	char *type;
-	AllocaInst *value;
+	PExType type;
+	AllocaInst *llvmval;
 
 	PVariable() {
 		type = NULL;
-		value = NULL;
+		llvmval = NULL;
 	}
 
-	PVariable(char *type, AllocaInst *value) {
+	PVariable(char *type, AllocaInst *llvmval) {
 		this->type = type;
-		this->value = value;
+		this->llvmval = llvmval;
 	}
 };
 
 // TODO: Function overloading should be supported here one day.
 struct PFunction {
-	char *return_type;
-	Function *value;
-	MemoryList<char *> arg_types;
+	PExType return_type;
+	Function *llvmval;
+	MemoryList<PExType> arg_types;
 	// TODO: Some state to show whether this is a binary/unary operator (or not).
 
 	PFunction() {
 		return_type = NULL;
-		value = NULL;
+		llvmval = NULL;
 	}
 
-	PFunction(char *return_type, Function *value) {
+	PFunction(char *return_type, Function *llvmval) {
 		this->return_type = return_type;
-		this->value = value;
+		this->llvmval = llvmval;
 	}
 };
 

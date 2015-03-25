@@ -113,9 +113,14 @@ ASTNode *Parser::parse_type() {
 	PType *ptype = search_for_type(*env, cursor->value);
 	if (ptype) {
 		result = create_node(NODE_TYPE);
-		result->data.string.value = cursor->value;
+		result->data.type.value = PExType(cursor->value);
 		scan_token_type(TOKEN_IDENTIFIER);
 	}
+
+	// TODO: Handle other modifiers (though, should they always have to be after
+	// the typename like this?)
+	if (scan_token(TOKEN_OPERATOR, "^"))
+		result->data.type.value.is_pointer = true;
 
 	return result;
 }
@@ -129,8 +134,7 @@ bool Parser::peek_unary_operator() {
 	return (peek_token_type(TOKEN_OPERATOR)
 		  && unary_operators[cursor[0].value])
 	    || (peek_token(TOKEN_RESERVED_PUNCTUATION, "(")
-	    && peek_type(1)
-	    && peek_token(TOKEN_RESERVED_PUNCTUATION, ")", 2));
+	    && peek_type(1));
 }
 
 bool Parser::peek_binary_operator() {
@@ -161,7 +165,7 @@ ASTNode *Parser::parse_unary_operator() {
 			ASTNode *type = parse_type();
 			assert(scan_token(TOKEN_RESERVED_PUNCTUATION, ")"));
 			result = create_node(NODE_CAST_OPERATOR);
-			result->data.unary_operator.value = type->data.string.value;
+			result->data.cast_operator.type = type->data.type.value;
 		}
 	}
 
@@ -193,7 +197,10 @@ ASTNode *Parser::parse_unary_operators() {
 		if (!result) {
 			result = op;
 		} else {
-			last_op->data.unary_operator.operand = op;
+			if (last_op->type == NODE_CAST_OPERATOR)
+				last_op->data.cast_operator.operand = op;
+			else
+				last_op->data.unary_operator.operand = op;
 			last_op = op;
 		}
 	}
@@ -203,7 +210,7 @@ ASTNode *Parser::parse_unary_operators() {
 
 ASTNode *Parser::parse_atom() {
 	ASTNode *result = parse_unary_operators();
-	ASTNode *&term = result ? result->data.unary_operator.operand : result;
+	ASTNode *&term = result ? (result->type == NODE_CAST_OPERATOR ? result->data.cast_operator.operand : result->data.unary_operator.operand) : result;
 
 	if ((term = parse_identifier())) {
 		if (scan_token(TOKEN_RESERVED_PUNCTUATION, "(")) {
@@ -293,9 +300,7 @@ ASTNode *Parser::parse_variable_declaration() {
 	ASTNode *result = create_node(NODE_VARIABLE_DECLARATION);
 
 	if (!scan_token(TOKEN_KEYWORD, "let"))
-		result->data.variable_declaration.type = parse_type();
-
-	// TODO: Handle modifiers.
+		result->data.variable_declaration.type = parse_type()->data.type.value;
 
 	if (peek_token_type(TOKEN_KEYWORD)) {
 		set_error("cannot declare variable with reserved keyword name");
@@ -375,7 +380,8 @@ ASTNode *Parser::parse_function() {
 	}
 
 	if (!scan_token(TOKEN_OPERATOR, "->")
-	 || !(signature->data.function_signature.type = parse_type()))
+	 || !(signature->data.function_signature.type
+	      = parse_type()->data.type.value).is_set())
 	{
 		set_error("expected type in function signature");
 		return NULL;

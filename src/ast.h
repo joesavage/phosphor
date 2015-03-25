@@ -60,6 +60,10 @@ struct ASTNode {
 			ASTNode *left;
 			ASTNode *right;
 		} binary_operator;
+		struct cast_operator {
+			PExType type;
+			ASTNode *operand;
+		} cast_operator;
 		struct statements {
 			MemoryList <ASTNode *> children;
 		} statements;
@@ -68,10 +72,9 @@ struct ASTNode {
 			Environment *env;
 		} block;
 		struct variable_declaration {
-			ASTNode *type;
+			PExType type;
 			ASTNode *name;
 			ASTNode *init;
-			// TODO: Variable modifiers
 		} variable_declaration;
 		struct conditional {
 			ASTNode *condition;
@@ -84,7 +87,7 @@ struct ASTNode {
 		} function;
 		struct function_signature {
 			ASTNode *name;
-			ASTNode *type;
+			PExType type;
 			MemoryList<ASTNode *> args;
 			Environment *env;
 			// TODO: Function modifiers
@@ -93,6 +96,9 @@ struct ASTNode {
 			ASTNode *name;
 			MemoryList<ASTNode *> args;
 		} function_call;
+		struct type {
+			PExType value;
+		} type;
 	} data;
 };
 
