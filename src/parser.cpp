@@ -187,6 +187,8 @@ ASTNode *Parser::parse_binary_operator() {
 ASTNode *Parser::parse_unary_operators() {
 	ASTNode *result = NULL;
 
+	// TODO: Add dereference and address-of operators.
+
 	ASTNode *last_op;
 	ASTNode *op;
 	// TODO: Deal with unary precedence?

@@ -263,7 +263,8 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 				break;
 			}
 
-			PType type = lookup_type(left);
+			PExType extype = left.type;
+			PType type = lookup_type(extype);
 			if (!type.is_numeric) {
 				set_error(pnode.right,
 				          "non-numeric type '%s' specified for binary operation",
@@ -272,6 +273,16 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 			}
 
 			// TODO: Handle pointer (+ other modifiers?) in operations!
+			// NOTE: This may be harder than I expected as it appears that it's the
+			// 'getelementptr' instruction that actually gets given the offset, not
+			// the pointers themselves. Additionally, 'pointer - pointer' shouldn't be
+			// too hard in theory, but I'm not sure what type it should return.
+			// This is all non-trivial, take a little while to think about it!
+			if (extype.is_pointer) {
+				set_error(node, "pointer types are not yet supported in binary "
+				          "expressions.");
+				break;
+			}
 			
 			// TODO: Handle other operators (>=, etc.)
 			// NOTE: We use 'ordered' floating point comparisons below. I think this
@@ -330,6 +341,8 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 		// case NODE_UNARY_OPERATOR:
 		// 	// TODO: What if we have an unsigned type negated by a unary operator?
 		// 	// I guess we perform an implicit type conversion?
+		// 
+		// 	// TODO: Eventually handle dereference and address-of operators here.
 		//
 		// 	break;
 		case NODE_CAST_OPERATOR:
