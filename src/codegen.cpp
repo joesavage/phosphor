@@ -91,8 +91,9 @@ bool CodeGenerator::implicit_type_convert(PValue *source,
 	if (source_type == dest_type)
 		return true;
 
-	// TODO: Deal with PExType modifiers properly
-	if (source->type.is_pointer || dest_extype.is_pointer)
+	// Pointers can only cast to themselves at the moment, so this check works
+	// fine. Will likely need to change this as other modifiers get introduced.
+	if (source->type.is_pointer || !dest_extype.is_pointer)
 		return false;
 
 	if (source_type.is_numeric && dest_type.is_numeric) {
@@ -179,8 +180,6 @@ PVariable CodeGenerator::generate_variable_declaration(ASTNode *node) {
 				} else if (variable_extype.is_set()) {
 					assert(implicit_type_convert(&value, variable_extype));
 				} else { // Type inference
-					// TODO: Do we really want small int literals to type infer to uint8?
-					// That seems kinda dumb, as I suspect people will expect (u?)int32.
 					result.type = value.type;
 				}
 			}
@@ -425,16 +424,10 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 			}
 
 			// Integer literals are unsigned by default, for now at least.
-			// Values are packaged into the smallest type in which they fit, as they
-			// can be implicitly casted up to larger types when necessary.
+			// These are typed as 'uint32' by default unless they are too large, in
+			// which case they are typed as 'uint64'.
 			int numbits = 0;
-			if (value <= 0xff) {
-				result.type = PExType("uint8");
-				numbits = 8;
-			} else if (value <= 0xffff) {
-				result.type = PExType("uint16");
-				numbits = 16;
-			} else if (value <= 0xffffffff) {
+			if (value <= 0xffffffff) {
 				result.type = PExType("uint32");
 				numbits = 32;
 			} else if (value <= 0xffffffffffffffff) {
