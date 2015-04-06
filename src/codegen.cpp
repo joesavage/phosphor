@@ -93,7 +93,7 @@ bool CodeGenerator::implicit_type_convert(PValue *source,
 
 	// Pointers can only cast to themselves at the moment, so this check works
 	// fine. Will likely need to change this as other modifiers get introduced.
-	if (source->type.is_pointer || !dest_extype.is_pointer)
+	if (source->type.is_pointer != dest_extype.is_pointer)
 		return false;
 
 	if (source_type.is_numeric && dest_type.is_numeric) {
@@ -178,7 +178,12 @@ PVariable CodeGenerator::generate_variable_declaration(ASTNode *node) {
 				if (error) {
 					break;
 				} else if (variable_extype.is_set()) {
-					assert(implicit_type_convert(&value, variable_extype));
+					if (!implicit_type_convert(&value, variable_extype)) {
+						set_error(pnode.init, "type mismatch in variable initialization - "
+						          "expected '%s', got '%s'", variable_extype.to_string(),
+					            value.type.to_string());
+						break;
+					}
 				} else { // Type inference
 					result.type = value.type;
 				}
@@ -226,7 +231,8 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 
 				if (!implicit_type_convert(&value, var_sym.type)) {
 					set_error(pnode.right, "type mismatch in assignment - expected '%s', "
-					          "got '%s'", var_sym.type, value.type);
+					          "got '%s'", var_sym.type.to_string(),
+					          value.type.to_string());
 					break;
 				}
 
@@ -258,7 +264,8 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 
 			if (!cast_success) {
 				set_error(pnode.right, "type mismatch in binary operation - expected "
-				          "'%s', got '%s'", left.type, right.type);
+				          "'%s', got '%s'", left.type.to_string(),
+				          right.type.to_string());
 				break;
 			}
 
@@ -267,7 +274,7 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 			if (!type.is_numeric) {
 				set_error(pnode.right,
 				          "non-numeric type '%s' specified for binary operation",
-				          left.type);
+				          left.type.to_string());
 				break;
 			}
 
@@ -352,7 +359,7 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 				break;
 			if (!explicit_type_convert(&value, pnode.type)) {
 				set_error(node, "failed to convert type '%s' to '%s'",
-				          value.type, pnode.type.to_string());
+				          value.type.to_string(), pnode.type.to_string());
 				break;
 			}
 
@@ -386,10 +393,10 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 				if (error)
 					break;
 				if (!implicit_type_convert(&arg, pfunction.arg_types[i])) {
-					set_error(node, "function parameter mis-match at param %d -",
+					set_error(node, "function parameter mismatch at param %d - "
 					          "expected '%s', got '%s'",
-					          pfunction.arg_types[i].to_string(),
-					          arg.type.to_string(), i);
+					          i + 1, pfunction.arg_types[i].to_string(),
+					          arg.type.to_string());
 					break;
 				}
 
