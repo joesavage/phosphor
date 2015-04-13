@@ -48,11 +48,11 @@ struct PType {
 };
 
 struct PExType {
-	char *type_name;
+	const char *type_name;
 	bool is_pointer;
 	// TODO: Other modifiers (possibly bitflag all modifiers in future)
 
-	PExType(char *type_name = NULL, bool is_pointer = false) {
+	PExType(const char *type_name = NULL, bool is_pointer = false) {
 		this->type_name = type_name;
 		this->is_pointer = is_pointer;
 	}

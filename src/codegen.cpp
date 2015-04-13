@@ -40,7 +40,7 @@ PType CodeGenerator::lookup_type(PValue value) {
 
 PType CodeGenerator::lookup_type(PExType extype) {
 	PType result;
-	PType *type = search_for_type(*env, extype.type_name);
+	PType *type = search_for_type(*env, const_cast<char *>(extype.type_name));
 	if (type) {
 		result = *type;
 		if (extype.is_pointer) {
@@ -67,7 +67,8 @@ PValue CodeGenerator::get_boolean_value(bool value) {
 	PValue result;
 	result.type = PExType("bool");
 	result.llvmval = ConstantInt::get(getGlobalContext(),
-	                                  APInt(lookup_type("bool").numbits, value));
+	                                  APInt(lookup_type(result.type).numbits,
+	                                  value));
 	return result;
 }
 
@@ -185,6 +186,9 @@ PVariable CodeGenerator::generate_variable_declaration(ASTNode *node) {
 						break;
 					}
 				} else { // Type inference
+					// TODO: Maybe we want to do something with the type here.
+					// If we're using an 8-bit int literal, for example, we might want
+					// to actually declare the variable as 32-bits in size.
 					result.type = value.type;
 				}
 			}
@@ -430,20 +434,22 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 				break;
 			}
 
-			// Integer literals are unsigned by default, for now at least.
-			// These are typed as 'uint32' by default unless they are too large, in
-			// which case they are typed as 'uint64'.
+			// Integer literals are unsigned by default, and are put into the smallest
+			// type they fit in.
 			int numbits = 0;
-			if (value <= 0xffffffff) {
+			if (value <= 0xff) {
+				result.type = PExType("uint8");
+			} else if (value <= 0xffff) {
+				result.type = PExType("uint16");
+			} else if (value <= 0xffffffff) {
 				result.type = PExType("uint32");
-				numbits = 32;
 			} else if (value <= 0xffffffffffffffff) {
 				result.type = PExType("uint64");
-				numbits = 64;
 			} else {
 				set_error(node, "integer literal too large");
 				break;
 			}
+			numbits = lookup_type(result.type).numbits;
 
 			result.llvmval = ConstantInt::get(getGlobalContext(),
 			                                  APInt(numbits, value, false));
