@@ -32,11 +32,13 @@ enum ASTNodeType {
 	NODE_CONSTANT_STRING
 };
 
+// TODO: Currently we don't do any type checking on this, which is worrying.
 #define DECL_ASTNODE_DATA(node, utype, name) \
 struct ASTNode::data::utype &name = node->data.utype
 
-// Tagged unions are 'Ugh.' to work with but have significant enough performance
-// gains over dynamic dispatch that I'm just going to run with it.
+// I'm starting to think that using a tagged union was a mistake, but really
+// it's the exact data structure I want - it's just that C makes dealing with
+// it a massive pain in the arse.
 struct ASTNode {
 	ASTNodeType type;
 	unsigned int line_no;

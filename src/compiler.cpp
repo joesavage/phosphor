@@ -178,6 +178,7 @@ int main() {
 	unary_operators.set("!",  POperator(POperator::UNARY, POperator::IMPLICIT_ASSOC, 2));
 	unary_operators.set("++", POperator(POperator::UNARY, POperator::IMPLICIT_ASSOC, 2));
 	unary_operators.set("--", POperator(POperator::UNARY, POperator::IMPLICIT_ASSOC, 2));
+	unary_operators.set("&",  POperator(POperator::UNARY, POperator::IMPLICIT_ASSOC, 2));
 
 	HashMap<POperator> &binary_operators = parser.binary_operators;
 	binary_operators.size = 64;
@@ -236,9 +237,7 @@ int main() {
 	// NOTE: A lot of the front-end code relies on a lot of pointers everywhere.
 	// Make sure to benchmark the performance of this at some point - the compiler
 	// should be really fast! [Maybe we should pass by value more often? esp. in
-	// codegen. Benchmark!] Alternatively, if the pointers are just a necessary
-	// construct - it's much cleaner to just use C++ member functions than passing
-	// the pointer as the first parameter manually in cases to which that applies.
+	// codegen. Benchmark!]
 
 	// TODO: Do we want to read the WHOLE text file into memory at once? Hmm...
 	lexer.source = read_file("test.ph");

@@ -49,7 +49,7 @@ struct PType {
 
 struct PExType {
 	const char *type_name;
-	bool is_pointer;
+	bool is_pointer; // TODO: What about pointers to pointers? Use a 'uint'?
 	// TODO: Other modifiers (possibly bitflag all modifiers in future)
 
 	PExType(const char *type_name = NULL, bool is_pointer = false) {

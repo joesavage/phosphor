@@ -1,11 +1,9 @@
 fn putchar(int32 ch) -> int32;
 
 fn main() -> int32 {
-	let a = 53;
-	while a != 49 {
-		putchar(a);
-		a = a - 1;
-	}
+	int32 a = (5 + 2);
+	int32 ^b = &a;
+	int32 c = (int32)b;
 
-	return 0;
+	return c;
 }

@@ -348,13 +348,37 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 			}
 			break;
 		}
-		// case NODE_UNARY_OPERATOR:
-		// 	// TODO: What if we have an unsigned type negated by a unary operator?
-		// 	// I guess we perform an implicit type conversion?
-		// 
-		// 	// TODO: Eventually handle dereference and address-of operators here.
-		//
-		// 	break;
+		case NODE_UNARY_OPERATOR:
+		{
+			DECL_ASTNODE_DATA(node, unary_operator, pnode);
+
+			// TODO: What if we have an unsigned type negated by a unary operator?
+			// (Particularly, if we're negating an int literal)
+		
+			// TODO: Eventually handle dereference operator here.
+
+			if (!strcmp(pnode.value, "&")) {
+				if (pnode.operand->type != NODE_IDENTIFIER) {
+					set_error(pnode.operand, "invalid operand to '&'");
+					break;
+				}
+
+				DECL_ASTNODE_DATA(pnode.operand, string, symbol_name);
+				PVariable variable = lookup_symbol(symbol_name.value);
+				if (!variable.type.is_set()) {
+					set_error(pnode.operand, "invalid symbol name for '&' operator");
+					break;
+				}
+
+				result.type = variable.type;
+				result.type.is_pointer = true;
+				result.llvmval = variable.llvmval;
+				break;
+			}
+
+			set_error(node, "unsupported unary operator '%s'", pnode.value);
+			break;
+		}
 		case NODE_CAST_OPERATOR:
 		{
 			DECL_ASTNODE_DATA(node, cast_operator, pnode);
@@ -799,6 +823,9 @@ void CodeGenerator::generate() {
 	errnode = NULL;
 
 	// TODO: Add module metadata here (inc. DataLayout)
+
+	// TODO: Think about alignment at some point. It seems like LLVM gives a lot
+	// of support for data alignment, but we're not currently using it.
 
 	// TODO: Think about (and extend) code passes (optimisation, etc.)
 	// Additionally, the order of these needs to be properly thought about!
