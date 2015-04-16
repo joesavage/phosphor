@@ -374,6 +374,16 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 				result.type.is_pointer = true;
 				result.llvmval = variable.llvmval;
 				break;
+			} else if (!strcmp(pnode.value, "+")) {
+				PValue value = generate_expression(pnode.operand);
+				PType type = lookup_type(value.type);
+				if (!type.is_numeric) {
+					set_error(node, "'+' may only be used on numeric types");
+					break;
+				}
+
+				result = value;
+				break;
 			}
 
 			set_error(node, "unsupported unary operator '%s'", pnode.value);
