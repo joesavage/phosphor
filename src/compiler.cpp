@@ -179,6 +179,7 @@ int main() {
 	unary_operators.set("++", POperator(POperator::UNARY, POperator::IMPLICIT_ASSOC, 2));
 	unary_operators.set("--", POperator(POperator::UNARY, POperator::IMPLICIT_ASSOC, 2));
 	unary_operators.set("&",  POperator(POperator::UNARY, POperator::IMPLICIT_ASSOC, 2));
+	unary_operators.set("*",  POperator(POperator::UNARY, POperator::IMPLICIT_ASSOC, 2));
 
 	HashMap<POperator> &binary_operators = parser.binary_operators;
 	binary_operators.size = 64;

@@ -374,6 +374,27 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 				result.type.is_pointer = true;
 				result.llvmval = variable.llvmval;
 				break;
+			} else if (!strcmp(pnode.value, "*")) {
+				if (pnode.operand->type != NODE_IDENTIFIER) {
+					set_error(pnode.operand, "invalid operand to '*'");
+					break;
+				}
+
+				DECL_ASTNODE_DATA(pnode.operand, string, symbol_name);
+				PVariable variable = lookup_symbol(symbol_name.value);
+				if (!variable.type.is_set()) {
+					set_error(pnode.operand, "invalid symbol name for '*' operator");
+					break;
+				} else if (!variable.type.is_pointer) {
+					set_error(pnode.operand, "tried to dereference non-pointer type");
+					break;
+				}
+
+				result.type = variable.type;
+				result.type.is_pointer = false;
+				Value *address = builder->CreateLoad(variable.llvmval);
+				result.llvmval = builder->CreateLoad(address);
+				break;
 			} else if (!strcmp(pnode.value, "+")) {
 				PValue value = generate_expression(pnode.operand);
 				PType type = lookup_type(value.type);
