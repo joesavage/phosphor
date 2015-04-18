@@ -32,9 +32,11 @@ enum ASTNodeType {
 	NODE_CONSTANT_STRING
 };
 
-// TODO: Currently we don't do any type checking on this, which is worrying.
+// Unfortunately, there's no real way we can add type checking to this easily.
+// This is HUGELY annoying as it means that all our AST accesses could easily
+// be accessing the wrong union member for their type. THIS IS ALL A HUGE MESS!
 #define DECL_ASTNODE_DATA(node, utype, name) \
-struct ASTNode::data::utype &name = node->data.utype
+struct ASTNode::data::utype &name = node->data.utype;
 
 // I'm starting to think that using a tagged union was a mistake, but really
 // it's the exact data structure I want - it's just that C makes dealing with
