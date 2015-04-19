@@ -36,7 +36,7 @@ static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 		switch (node->type) {
 			case NODE_STATEMENTS:
 			{
-				DECL_ASTNODE_DATA(node, statements, pdata);
+				auto pdata = *node->toStatements();
 				printf("STATEMENTS\n");
 				for (size_t i = 0; i < pdata.children.size(); ++i)
 					printf_ast(pdata.children[i], "STMT", depth + 1);
@@ -44,14 +44,14 @@ static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 			}
 			case NODE_BLOCK:
 			{
-				DECL_ASTNODE_DATA(node, block, pdata);
+				auto pdata = *node->toBlock();
 				printf("BLOCK\n");
 				printf_ast(pdata.statements, "STATEMENTS", depth + 1);
 				break;
 			}
 			case NODE_VARIABLE_DECLARATION:
 			{
-				DECL_ASTNODE_DATA(node, variable_declaration, pdata);
+				auto pdata = *node->toVariableDeclaration();
 				printf("VARDECL\n");
 				for (size_t i = 0; i < depth; ++i)
 					printf("   ");
@@ -62,21 +62,21 @@ static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 			}
 			case NODE_UNARY_OPERATOR:
 			{
-				DECL_ASTNODE_DATA(node, unary_operator, pdata);
+				auto pdata = *node->toUnaryOperator();
 				printf("UNARY_OP<%s>\n", pdata.value);
 				printf_ast(pdata.operand, "OPERAND", depth + 1);
 				break;
 			}
 			case NODE_CAST_OPERATOR:
 			{
-				DECL_ASTNODE_DATA(node, cast_operator, pdata);
+				auto pdata = *node->toCastOperator();
 				printf("CAST<%s>\n", pdata.type.to_string());
 				printf_ast(pdata.operand, "OPERAND", depth + 1);
 				break;	
 			}
 			case NODE_BINARY_OPERATOR:
 			{
-				DECL_ASTNODE_DATA(node, binary_operator, pdata);
+				auto pdata = *node->toBinaryOperator();
 				printf("BINARY_OP<%s>\n", pdata.value);
 				printf_ast(pdata.left, "LEFT", depth + 1);
 				printf_ast(pdata.right, "RIGHT", depth + 1);
@@ -84,12 +84,12 @@ static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 			}
 			case NODE_CONSTANT_BOOL:
 			{
-				printf("INT<%zu>\n", node->data.integer.value);
+				printf("INT<%zu>\n", node->toInteger()->value);
 				break;
 			}
 			case NODE_TYPE:
 			{
-				DECL_ASTNODE_DATA(node, type, pdata);
+				auto pdata = *node->toType();
 				printf("TYPE<%s>\n", pdata.value.to_string());
 				break;
 			}
@@ -98,12 +98,12 @@ static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 			case NODE_CONSTANT_FLOAT:
 			case NODE_CONSTANT_STRING:
 			{
-				printf("STRING<%s>\n", node->data.string.value);
+				printf("STRING<%s>\n", node->toString()->value);
 				break;
 			}
 			case NODE_FUNCTION:
 			{
-				DECL_ASTNODE_DATA(node, function, pdata);
+				auto pdata = *node->toFunction();
 				printf("FUNCTION\n");
 				printf_ast(pdata.signature, "SIG", depth + 1);
 				printf_ast(pdata.body, "BODY", depth + 1);
@@ -111,7 +111,7 @@ static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 			}
 			case NODE_FUNCTION_SIGNATURE:
 			{
-				DECL_ASTNODE_DATA(node, function_signature, pdata);
+				auto pdata = *node->toFunctionSignature();
 				printf("FUNCTION_SIG\n");
 				printf_ast(pdata.name, "NAME", depth + 1);
 				for (size_t i = 0; i < depth; ++i)
@@ -123,7 +123,7 @@ static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 			}
 			case NODE_FUNCTION_CALL:
 			{
-				DECL_ASTNODE_DATA(node, function_call, pdata);
+				auto pdata = *node->toFunctionCall();
 				printf("FUNCTION_CALL\n");
 				printf_ast(pdata.name, "NAME", depth + 1);
 				for (size_t i = 0; i < pdata.args.size(); ++i)
@@ -133,15 +133,15 @@ static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 			case NODE_RETURN:
 			{
 				printf("RETURN\n");
-				printf_ast(node->data.unary_operator.operand, "EXPR", depth + 1);
+				printf_ast(node->toUnaryOperator()->operand, "EXPR", depth + 1);
 				break;
 			}
 			case NODE_IF:
 			{
 				printf("IF\n");
-				printf_ast(node->data.conditional.condition, "COND", depth + 1);
-				printf_ast(node->data.conditional.then, "THEN", depth + 1);
-				printf_ast(node->data.conditional.otherwise, "ELSE", depth + 1);
+				printf_ast(node->toConditional()->condition, "COND", depth + 1);
+				printf_ast(node->toConditional()->then, "THEN", depth + 1);
+				printf_ast(node->toConditional()->otherwise, "ELSE", depth + 1);
 				break;
 			}
 			case NODE_DO_LOOP:
@@ -235,10 +235,9 @@ int main() {
 	type_table.set("float32", PType(Type::getFloatTy(getGlobalContext()), 32, true, true, true));
 	type_table.set("float64", PType(Type::getDoubleTy(getGlobalContext()), 64, true, true, true));
 
-	// NOTE: A lot of the front-end code relies on a lot of pointers everywhere.
-	// Make sure to benchmark the performance of this at some point - the compiler
-	// should be really fast! [Maybe we should pass by value more often? esp. in
-	// codegen. Benchmark!]
+	// NOTE: A lot of the code relies on a lot of pointers just about everywhere.
+	// Perhaps too much? I feel like maybe more value semantics would result in
+	// faster and cleaner code.
 
 	// TODO: Do we want to read the WHOLE text file into memory at once? Hmm...
 	lexer.source = read_file("test.ph");
@@ -264,6 +263,7 @@ int main() {
 	generator.root = parser.parse();
 	free(parser.tokens);
 	// TODO: Fancy errors which output the text containing the issue would be good
+	// In general, the quality of errors need significantly improving too.
 	if (parser.error) {
 		// parser.strings.free();
 		// parser.nodes.free();

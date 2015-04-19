@@ -9,8 +9,6 @@
 #include "parser.h"
 #include "helpers.h"
 
-// TODO: The quality of errors in here needs significantly improving.
-
 void Parser::set_error(const char *format, ...) {
 	free(error);
 
@@ -35,10 +33,10 @@ void Parser::set_environment(ASTNode *node,
 
 	switch (node->type) {
 		case NODE_FUNCTION_SIGNATURE:
-			node->data.function_signature.env = env;
+			node->toFunctionSignature()->env = env;
 			break;
 		default:
-			node->data.block.env = env;
+			node->toBlock()->env = env;
 			break;
 	}
 }
@@ -73,21 +71,21 @@ ASTNode *Parser::parse_constant() {
 	PToken *token = NULL;
 	if ((token = scan_token_type(TOKEN_INT))) {
 		result = create_node(NODE_CONSTANT_INT);
-		result->data.string.value = token->value;
+		result->toString()->value = token->value;
 	} else if ((token = scan_token_type(TOKEN_FLOAT))) {
 		result = create_node(NODE_CONSTANT_FLOAT);
-		result->data.string.value = token->value;
+		result->toString()->value = token->value;
 	} else if ((token = scan_token_type(TOKEN_STRING))) {
 		result = create_node(NODE_CONSTANT_STRING);
-		result->data.string.value = token->value;
+		result->toString()->value = token->value;
 	} else if (peek_token(TOKEN_KEYWORD, "true")) {
 		++cursor;
 		result = create_node(NODE_CONSTANT_BOOL);
-		result->data.integer.value = 1;
+		result->toInteger()->value = 1;
 	} else if (peek_token(TOKEN_KEYWORD, "false")) {
 		++cursor;
 		result = create_node(NODE_CONSTANT_BOOL);
-		result->data.integer.value = 0;
+		result->toInteger()->value = 0;
 	}
 	
 	return result;
@@ -99,7 +97,7 @@ ASTNode *Parser::parse_identifier() {
 	PToken *identifier = scan_token_type(TOKEN_IDENTIFIER);
 	if (identifier) {
 		result = create_node(NODE_IDENTIFIER);
-		result->data.string.value = identifier->value;
+		result->toString()->value = identifier->value;
 	}
 
 	return result;
@@ -113,14 +111,14 @@ ASTNode *Parser::parse_type() {
 	PType *ptype = search_for_type(*env, cursor->value);
 	if (ptype) {
 		result = create_node(NODE_TYPE);
-		result->data.type.value = PExType(cursor->value);
+		result->toType()->value = PExType(cursor->value);
 		scan_token_type(TOKEN_IDENTIFIER);
 	}
 
 	// TODO: Handle other modifiers (though, should they always have to be after
 	// the typename like this?)
 	if (scan_token(TOKEN_OPERATOR, "^"))
-		result->data.type.value.is_pointer = true;
+		result->toType()->value.is_pointer = true;
 
 	return result;
 }
@@ -144,7 +142,7 @@ bool Parser::peek_binary_operator() {
 
 ASTNode *Parser::create_node(ASTNodeType type) {
 	ASTNode *result = (ASTNode *)nodes.reserve(sizeof(ASTNode));
-	initialise_node(result, type);
+	result->initialise(type);
 	if (!eof()) {
 		result->line_no = cursor->line_no;
 		result->col_no = cursor->col_no;
@@ -159,13 +157,13 @@ ASTNode *Parser::parse_unary_operator() {
 		if (peek_token_type(TOKEN_OPERATOR)) {
 			PToken *op = scan_token_type(TOKEN_OPERATOR);
 			result = create_node(NODE_UNARY_OPERATOR);
-			result->data.unary_operator.value = op->value;
+			result->toUnaryOperator()->value = op->value;
 		} else { // It must be a cast!
 			assert(scan_token(TOKEN_RESERVED_PUNCTUATION, "("));
 			ASTNode *type = parse_type();
 			assert(scan_token(TOKEN_RESERVED_PUNCTUATION, ")"));
 			result = create_node(NODE_CAST_OPERATOR);
-			result->data.cast_operator.type = type->data.type.value;
+			result->toCastOperator()->type = type->toType()->value;
 		}
 	}
 
@@ -178,7 +176,7 @@ ASTNode *Parser::parse_binary_operator() {
 	if (peek_binary_operator()) {
 		PToken *op = scan_token_type(TOKEN_OPERATOR);
 		result = create_node(NODE_BINARY_OPERATOR);
-		result->data.string.value = op->value;
+		result->toBinaryOperator()->value = op->value;
 	}
 
 	return result;
@@ -200,9 +198,9 @@ ASTNode *Parser::parse_unary_operators() {
 			result = op;
 		} else {
 			if (last_op->type == NODE_CAST_OPERATOR)
-				last_op->data.cast_operator.operand = op;
+				last_op->toCastOperator()->operand = op;
 			else
-				last_op->data.unary_operator.operand = op;
+				last_op->toUnaryOperator()->operand = op;
 			last_op = op;
 		}
 	}
@@ -212,7 +210,7 @@ ASTNode *Parser::parse_unary_operators() {
 
 ASTNode *Parser::parse_atom() {
 	ASTNode *result = parse_unary_operators();
-	ASTNode *&term = result ? (result->type == NODE_CAST_OPERATOR ? result->data.cast_operator.operand : result->data.unary_operator.operand) : result;
+	ASTNode *&term = result ? (result->type == NODE_CAST_OPERATOR ? result->toCastOperator()->operand : result->toUnaryOperator()->operand) : result;
 
 	if ((term = parse_identifier())) {
 		if (scan_token(TOKEN_RESERVED_PUNCTUATION, "(")) {
@@ -221,12 +219,12 @@ ASTNode *Parser::parse_atom() {
 			ASTNode *arg;
 			// TODO: 'func(arg1, arg2,)' parses without errors at current.
 			while ((arg = parse_expression())) {
-				call->data.function_call.args.add(arg);
+				call->toFunctionCall()->args.add(arg);
 				if (!scan_token(TOKEN_RESERVED_PUNCTUATION, ","))
 					break;
 			}
 
-			call->data.function_call.name = term;
+			call->toFunctionCall()->name = term;
 			term = call;
 			if (!scan_token(TOKEN_RESERVED_PUNCTUATION, ")")) {
 				set_error("expected closing bracket after function call");
@@ -290,8 +288,8 @@ ASTNode *Parser::parse_expression(unsigned char minimum_precedence) {
 			return NULL;
 		}
 
-		op->data.binary_operator.left = result;
-		op->data.binary_operator.right = right;
+		op->toBinaryOperator()->left = result;
+		op->toBinaryOperator()->right = right;
 		result = op;
 	}
 
@@ -302,19 +300,19 @@ ASTNode *Parser::parse_variable_declaration() {
 	ASTNode *result = create_node(NODE_VARIABLE_DECLARATION);
 
 	if (!scan_token(TOKEN_KEYWORD, "let"))
-		result->data.variable_declaration.type = parse_type()->data.type.value;
+		result->toVariableDeclaration()->type = parse_type()->toType()->value;
 
 	if (peek_token_type(TOKEN_KEYWORD)) {
 		set_error("cannot declare variable with reserved keyword name");
 		return NULL;
-	} else if (!(result->data.variable_declaration.name = parse_identifier())) {
+	} else if (!(result->toVariableDeclaration()->name = parse_identifier())) {
 		set_error("expected identifier for variable declaration");
 		return NULL;
 	}
 
 	// Handle assignment after declaration syntax (i.e. 'int32 a = 5')
 	if (scan_token(TOKEN_OPERATOR, "=")) {
-		result->data.variable_declaration.init = parse_expression();
+		result->toVariableDeclaration()->init = parse_expression();
 	}
 
 	return result;
@@ -329,10 +327,10 @@ ASTNode *Parser::parse_block() {
 	set_environment(result, env);
 
 	Environment *prev_env = env;
-	env = result->data.block.env;
+	env = result->toBlock()->env;
 
-	result->data.block.statements = parse_statements();
-	if (!result->data.block.statements || error)
+	result->toBlock()->statements = parse_statements();
+	if (!result->toBlock()->statements || error)
 		return NULL;
 
 	if (!scan_token(TOKEN_RESERVED_PUNCTUATION, "}")) {
@@ -356,13 +354,13 @@ ASTNode *Parser::parse_function() {
 		set_error("expected identifier for function signature");
 		return NULL;
 	}
-	signature->data.function_signature.name = identifier;
+	signature->toFunctionSignature()->name = identifier;
 
 	// TODO: When we support function overloading, we need to change this line.
-	set_environment(signature, env, identifier->data.string.value);
+	set_environment(signature, env, identifier->toString()->value);
 
 	Environment *prev_env = env;
-	env = signature->data.function_signature.env;
+	env = signature->toFunctionSignature()->env;
 
 	if (!scan_token(TOKEN_RESERVED_PUNCTUATION, "(")) {
 		set_error("expected opening bracket for function signature");
@@ -371,7 +369,7 @@ ASTNode *Parser::parse_function() {
 
 	ASTNode *arg;
 	while ((peek_type()) && (arg = parse_variable_declaration())) {
-		signature->data.function_signature.args.add(arg);
+		signature->toFunctionSignature()->args.add(arg);
 		if (!scan_token(TOKEN_RESERVED_PUNCTUATION, ","))
 			break;
 	}
@@ -382,8 +380,8 @@ ASTNode *Parser::parse_function() {
 	}
 
 	if (!scan_token(TOKEN_OPERATOR, "->")
-	 || !(signature->data.function_signature.type
-	      = parse_type()->data.type.value).is_set())
+	 || !(signature->toFunctionSignature()->type
+	      = parse_type()->toType()->value).is_set())
 	{
 		set_error("expected type in function signature");
 		return NULL;
@@ -394,11 +392,11 @@ ASTNode *Parser::parse_function() {
 		return signature;
 	} else {
 		ASTNode *function = create_node(NODE_FUNCTION);
-		function->data.function.signature = signature;
-		if (!function->data.function.signature || error)
+		function->toFunction()->signature = signature;
+		if (!function->toFunction()->signature || error)
 			return NULL;
-		function->data.function.body = parse_block();
-		if (!function->data.function.body || error)
+		function->toFunction()->body = parse_block();
+		if (!function->toFunction()->body || error)
 			return NULL;
 		env = prev_env;
 		return function;
@@ -415,20 +413,20 @@ ASTNode *Parser::parse_if() {
 	}
 
 	ASTNode *result = create_node(NODE_IF);
-	result->data.conditional.condition = parse_expression();
-	if (!result->data.conditional.condition || error)
+	result->toConditional()->condition = parse_expression();
+	if (!result->toConditional()->condition || error)
 		return NULL;
-	result->data.conditional.then = parse_block();
-	if (!result->data.conditional.then || error)
+	result->toConditional()->then = parse_block();
+	if (!result->toConditional()->then || error)
 		return NULL;
 
 	if (scan_token(TOKEN_KEYWORD, "else")) {
 		if (peek_token(TOKEN_KEYWORD, "if"))
-			result->data.conditional.otherwise = parse_if();
+			result->toConditional()->otherwise = parse_if();
 		else
-			result->data.conditional.otherwise = parse_block();
+			result->toConditional()->otherwise = parse_block();
 
-		if (!result->data.conditional.otherwise || error)
+		if (!result->toConditional()->otherwise || error)
 			return NULL;
 	}
 
@@ -442,16 +440,16 @@ ASTNode *Parser::parse_while() {
 	}
 
 	ASTNode *result = create_node(NODE_WHILE_LOOP);
-	result->data.conditional.condition = parse_expression();
-	if (!result->data.conditional.condition || error)
+	result->toConditional()->condition = parse_expression();
+	if (!result->toConditional()->condition || error)
 		return NULL;
-	result->data.conditional.then = parse_block();
-	if (!result->data.conditional.then || error)
+	result->toConditional()->then = parse_block();
+	if (!result->toConditional()->then || error)
 		return NULL;
 
 	if (scan_token(TOKEN_KEYWORD, "else")) {
-		result->data.conditional.otherwise = parse_block();
-		if (!result->data.conditional.otherwise || error)
+		result->toConditional()->otherwise = parse_block();
+		if (!result->toConditional()->otherwise || error)
 			return NULL;
 	}
 
@@ -465,8 +463,8 @@ ASTNode *Parser::parse_return() {
 	}
 
 	ASTNode *result = create_node(NODE_RETURN);
-	result->data.unary_operator.operand = parse_expression();
-	if (!result->data.unary_operator.operand)
+	result->toUnaryOperator()->operand = parse_expression();
+	if (!result->toUnaryOperator()->operand)
 		error = NULL;
 	else if (error)
 		return NULL;
@@ -505,7 +503,7 @@ ASTNode *Parser::parse_statements() {
 		if (!result)
 			result = create_node(NODE_STATEMENTS);
 		
-		result->data.statements.children.add(statement);
+		result->toStatements()->children.add(statement);
 		scan_token(TOKEN_RESERVED_PUNCTUATION, ";");
 	}
 

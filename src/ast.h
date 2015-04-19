@@ -4,9 +4,8 @@
 #include "environment.h"
 #include "memorylist.hpp"
 
-#define MINIMUM_OPERATOR_PRECISION 1
-
 enum ASTNodeType {
+	NODE_VOID,
 	NODE_STATEMENTS,
 	NODE_VARIABLE_DECLARATION,
 	NODE_IF,
@@ -32,19 +31,7 @@ enum ASTNodeType {
 	NODE_CONSTANT_STRING
 };
 
-// Unfortunately, there's no real way we can add type checking to this easily.
-// This is HUGELY annoying as it means that all our AST accesses could easily
-// be accessing the wrong union member for their type. THIS IS ALL A HUGE MESS!
-#define DECL_ASTNODE_DATA(node, utype, name) \
-struct ASTNode::data::utype &name = node->data.utype;
-
-// I'm starting to think that using a tagged union was a mistake, but really
-// it's the exact data structure I want - it's just that C makes dealing with
-// it a massive pain in the arse.
-struct ASTNode {
-	ASTNodeType type;
-	unsigned int line_no;
-	unsigned int col_no;
+class ASTNode {
 	union data {
 		struct real {
 			double value;
@@ -104,8 +91,28 @@ struct ASTNode {
 			PExType value;
 		} type;
 	} data;
-};
 
-void initialise_node(ASTNode *node, ASTNodeType type);
+public:
+	ASTNodeType type;
+	unsigned int line_no;
+	unsigned int col_no;
+
+	ASTNode();
+	void initialise(ASTNodeType type = NODE_VOID);
+	struct data::real *toReal();
+	struct data::integer *toInteger();
+	struct data::string *toString();
+	struct data::unary_operator *toUnaryOperator();
+	struct data::binary_operator *toBinaryOperator();
+	struct data::cast_operator *toCastOperator();
+	struct data::statements *toStatements();
+	struct data::block *toBlock();
+	struct data::variable_declaration *toVariableDeclaration();
+	struct data::conditional *toConditional();
+	struct data::function *toFunction();
+	struct data::function_signature *toFunctionSignature();
+	struct data::function_call *toFunctionCall();
+	struct data::type *toType();
+};
 
 #endif

@@ -162,8 +162,8 @@ PVariable CodeGenerator::generate_variable_declaration(ASTNode *node) {
 	switch (node->type) {
 		case NODE_VARIABLE_DECLARATION:
 		{
-			DECL_ASTNODE_DATA(node, variable_declaration, pnode);
-			char *variable_name = pnode.name->data.string.value;
+			auto pnode = *node->toVariableDeclaration();
+			char *variable_name = pnode.name->toString()->value;
 			PExType variable_extype;
 			if (pnode.type.is_set())
 				variable_extype = pnode.type;
@@ -219,11 +219,11 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 	switch (node->type) {
 		case NODE_BINARY_OPERATOR:
 		{
-			DECL_ASTNODE_DATA(node, binary_operator, pnode);
+			auto pnode = *node->toBinaryOperator();
 
 			// TODO: Handle other operators (+=, etc.)
 			if (!strcmp(pnode.value, "=")) {
-				DECL_ASTNODE_DATA(pnode.left, string, symbol_name);
+				auto symbol_name = *pnode.left->toString();
 				PVariable var_sym = lookup_symbol(symbol_name.value);
 				if (!var_sym.type.is_set()) {
 					set_error(pnode.left, "invalid symbol name for assignment");
@@ -350,7 +350,7 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 		}
 		case NODE_UNARY_OPERATOR:
 		{
-			DECL_ASTNODE_DATA(node, unary_operator, pnode);
+			auto pnode = *node->toUnaryOperator();
 
 			// TODO: What if we have an unsigned type negated by a unary operator?
 			// (Particularly, if we're negating an int literal)
@@ -363,7 +363,7 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 					break;
 				}
 
-				DECL_ASTNODE_DATA(pnode.operand, string, symbol_name);
+				auto symbol_name = *pnode.operand->toString();
 				PVariable variable = lookup_symbol(symbol_name.value);
 				if (!variable.type.is_set()) {
 					set_error(pnode.operand, "invalid symbol name for '&' operator");
@@ -380,7 +380,7 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 					break;
 				}
 
-				DECL_ASTNODE_DATA(pnode.operand, string, symbol_name);
+				auto symbol_name = *pnode.operand->toString();
 				PVariable variable = lookup_symbol(symbol_name.value);
 				if (!variable.type.is_set()) {
 					set_error(pnode.operand, "invalid symbol name for '*' operator");
@@ -412,7 +412,7 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 		}
 		case NODE_CAST_OPERATOR:
 		{
-			DECL_ASTNODE_DATA(node, cast_operator, pnode);
+			auto pnode = *node->toCastOperator();
 			PValue value = generate_expression(pnode.operand);
 			if (error)
 				break;
@@ -428,8 +428,8 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 		}
 		case NODE_FUNCTION_CALL:
 		{
-			DECL_ASTNODE_DATA(node, function_call, pnode);
-			char *function_name = pnode.name->data.string.value;
+			auto pnode = *node->toFunctionCall();
+			char *function_name = pnode.name->toString()->value;
 			Function *function = module->getFunction(function_name);
 			PFunction pfunction = lookup_function(function_name);
 			if (!function || !pfunction.return_type.is_set()) {
@@ -475,7 +475,7 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 		case NODE_CONSTANT_INT:
 		{
 			// TODO: Need to deal with hex, etc.
-			DECL_ASTNODE_DATA(node, string, pnode);
+			auto pnode = *node->toString();
 			char *endptr = pnode.value;
 			unsigned long long value = strtoull(pnode.value, &endptr, 10);
 			assert(sizeof(value) >= 8);
@@ -512,7 +512,7 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 		}
 		case NODE_CONSTANT_BOOL:
 		{
-			DECL_ASTNODE_DATA(node, integer, pnode);
+			auto pnode = *node->toInteger();
 			result = get_boolean_value(pnode.value);
 			result.type = PExType("bool");
 			break;
@@ -522,7 +522,7 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 			// TODO: This seems like a pretty terrible way to initialize an APFloat.
 			// TODO: Also, we probably want to deal with oversized floats or whatever
 			// here.
-			DECL_ASTNODE_DATA(node, string, pnode);
+			auto pnode = *node->toString();
 			result.type = PExType("float64");
 			APFloat number(0.0);
 			number.convertFromString(pnode.value, APFloat::rmNearestTiesToEven);
@@ -531,7 +531,7 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 		}
 		case NODE_IDENTIFIER:
 		{
-			DECL_ASTNODE_DATA(node, string, pnode);
+			auto pnode = *node->toString();
 			PVariable value = lookup_symbol(pnode.value);
 			if (!value.type.is_set()) {
 				set_error(node, "failed to find symbol '%s'", pnode.value);
@@ -556,14 +556,14 @@ PFunction CodeGenerator::generate_function(ASTNode *node) {
 	switch (node->type) {
 		case NODE_FUNCTION_SIGNATURE:
 		{
-			DECL_ASTNODE_DATA(node, function_signature, pnode);
+			auto pnode = *node->toFunctionSignature();
 			Environment *previous_env = env;
 			env = pnode.env;
 
 			size_t args_count = pnode.args.size();
 			MemoryList<Type *> args(args_count);
 			for (size_t i = 0; i < args_count; ++i) {
-				DECL_ASTNODE_DATA(pnode.args[i], variable_declaration, arg);
+				auto arg = *pnode.args[i]->toVariableDeclaration();
 
 				PExType extype = arg.type;
 				result.arg_types.add(extype);
@@ -575,7 +575,7 @@ PFunction CodeGenerator::generate_function(ASTNode *node) {
 				break;
 
 			// TODO: Need to handle redefinitions
-			char *function_name = pnode.name->data.string.value;
+			char *function_name = pnode.name->toString()->value;
 			PExType extype = pnode.type;
 			FunctionType *function_type;
 			Function *function;
@@ -635,7 +635,7 @@ PFunction CodeGenerator::generate_function(ASTNode *node) {
 		}
 		case NODE_FUNCTION:
 		{
-			DECL_ASTNODE_DATA(node, function, pnode);
+			auto pnode = *node->toFunction();
 			PFunction function = generate_function(pnode.signature);
 			if (error)
 				break;
@@ -645,10 +645,10 @@ PFunction CodeGenerator::generate_function(ASTNode *node) {
 			builder->SetInsertPoint(BB);
 
 			Environment *prev_env = env; // TODO: Helper for env push/pop
-			env = pnode.signature->data.function_signature.env;
+			env = pnode.signature->toFunctionSignature()->env;
 
 			{
-				DECL_ASTNODE_DATA(pnode.signature, function_signature, psignature);
+				auto psignature = *pnode.signature->toFunctionSignature();
 				MemoryList<ASTNode *> args = psignature.args;
 				Function *funcval = function.llvmval;
 				Function::arg_iterator it;
@@ -658,8 +658,8 @@ PFunction CodeGenerator::generate_function(ASTNode *node) {
 					if (error)
 						break;
 
-					DECL_ASTNODE_DATA(args[i], variable_declaration, arg);
-					char *param_name = arg.name->data.string.value;
+					auto arg = *args[i]->toVariableDeclaration();
+					char *param_name = arg.name->toString()->value;
 					it->setName(param_name);
 					PVariable param = lookup_symbol(param_name);
 					builder->CreateStore(it, param.llvmval);
@@ -689,7 +689,7 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 	switch (node->type) {
 		case NODE_STATEMENTS:
 		{
-			DECL_ASTNODE_DATA(node, statements, pnode);
+			auto pnode = *node->toStatements();
 			for (size_t i = 0; i < pnode.children.size(); ++i) {
 				generate_statement(pnode.children[i]);
 				if (error)
@@ -699,7 +699,7 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 		}
 		case NODE_BLOCK:
 		{
-			DECL_ASTNODE_DATA(node, block, pnode);
+			auto pnode = *node->toBlock();
 			Environment *prev_env = env;
 			env = pnode.env;
 			generate_statement(pnode.statements);
@@ -722,7 +722,7 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 			break;
 		case NODE_IF:
 		{
-			DECL_ASTNODE_DATA(node, conditional, pnode);
+			auto pnode = *node->toConditional();
 			PValue cond = generate_expression(pnode.condition);
 			if (error)
 				break;
@@ -765,7 +765,7 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 		}
 		case NODE_WHILE_LOOP:
 		{
-			DECL_ASTNODE_DATA(node, conditional, pnode);
+			auto pnode = *node->toConditional();
 			Function *function;
 			BasicBlock *preloop, *loop, *after;
 
@@ -804,7 +804,7 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 		}
 		case NODE_RETURN:
 		{
-			DECL_ASTNODE_DATA(node, unary_operator, pnode);
+			auto pnode = *node->toUnaryOperator();
 			PValue val;
 			if (pnode.operand) {
 				val = generate_expression(pnode.operand);
