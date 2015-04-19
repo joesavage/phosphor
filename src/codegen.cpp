@@ -352,6 +352,28 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 				else
 					result.llvmval = builder->CreateICmpNE(left.llvmval,
 					                                       right.llvmval, "neqtmp");
+			} else if (!strcmp(pnode.value, "<")) {
+				result.type = PExType("bool");
+				if (type.is_float)
+					result.llvmval = builder->CreateFCmpOLT(left.llvmval,
+					                                        right.llvmval, "lttmp");
+				else if (type.is_signed)
+					result.llvmval = builder->CreateICmpSLT(left.llvmval,
+					                                       right.llvmval, "lttmp");
+				else
+					result.llvmval = builder->CreateICmpULT(left.llvmval,
+					                                       right.llvmval, "lttmp");
+			} else if (!strcmp(pnode.value, ">")) {
+				result.type = PExType("bool");
+				if (type.is_float)
+					result.llvmval = builder->CreateFCmpOGT(left.llvmval,
+					                                        right.llvmval, "gttmp");
+				else if (type.is_signed)
+					result.llvmval = builder->CreateICmpSGT(left.llvmval,
+					                                       right.llvmval, "gttmp");
+				else
+					result.llvmval = builder->CreateICmpUGT(left.llvmval,
+					                                       right.llvmval, "gttmp");
 			} else if (!strcmp(pnode.value, "+")) {
 				if (type.is_float)
 					result.llvmval = builder->CreateFAdd(left.llvmval,
