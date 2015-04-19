@@ -117,8 +117,17 @@ ASTNode *Parser::parse_type() {
 
 	// TODO: Handle other modifiers (though, should they always have to be after
 	// the typename like this?)
-	if (scan_token(TOKEN_OPERATOR, "^"))
-		result->toType()->value.is_pointer = true;
+	if (cursor->value[0] == '^') {
+		char *value = scan_token_type(TOKEN_OPERATOR)->value;
+		for (size_t i = 0; i < strlen(value); ++i) {
+			if (value[i] == '^') {
+				result->toType()->value.pointer_level += 1;
+			} else {
+				set_error("unexpected operator in variable declaration");
+				return NULL;
+			}
+		}
+	}
 
 	return result;
 }
@@ -195,7 +204,7 @@ ASTNode *Parser::parse_unary_operators() {
 	{
 		op = parse_unary_operator();
 		if (!result) {
-			result = op;
+			result = last_op = op;
 		} else {
 			if (last_op->type == NODE_CAST_OPERATOR)
 				last_op->toCastOperator()->operand = op;

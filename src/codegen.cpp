@@ -43,10 +43,9 @@ PType CodeGenerator::lookup_type(PExType extype) {
 	PType *type = search_for_type(*env, const_cast<char *>(extype.type_name));
 	if (type) {
 		result = *type;
-		if (extype.is_pointer) {
-			// TODO: Is '0' a good address space parameter here?
+		for (unsigned int i = 0; i < extype.pointer_level; ++i)
 			result.llvmty = PointerType::get(result.llvmty, 0);
-		}
+
 		// Other modifiers can go here
 	}
 
@@ -94,7 +93,7 @@ bool CodeGenerator::implicit_type_convert(PValue *source,
 
 	// Pointers can only cast to themselves at the moment, so this check works
 	// fine. Will likely need to change this as other modifiers get introduced.
-	if (source->type.is_pointer != dest_extype.is_pointer)
+	if (source->type.pointer_level != dest_extype.pointer_level)
 		return false;
 
 	if (source_type.is_numeric && dest_type.is_numeric) {
@@ -288,7 +287,7 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 			// the pointers themselves. Additionally, 'pointer - pointer' shouldn't be
 			// too hard in theory, but I'm not sure what type it should return.
 			// This is all non-trivial, take a little while to think about it!
-			if (extype.is_pointer) {
+			if (extype.pointer_level) {
 				set_error(node, "pointer types are not yet supported in binary "
 				          "expressions.");
 				break;
@@ -371,29 +370,19 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 				}
 
 				result.type = variable.type;
-				result.type.is_pointer = true;
+				result.type.pointer_level += 1;
 				result.llvmval = variable.llvmval;
 				break;
 			} else if (!strcmp(pnode.value, "*")) {
-				if (pnode.operand->type != NODE_IDENTIFIER) {
-					set_error(pnode.operand, "invalid operand to '*'");
+				PValue value = generate_expression(pnode.operand);
+
+				if (!value.type.pointer_level) {
+					set_error(pnode.operand, "cannot dereference non-pointer operand");
 					break;
 				}
-
-				auto symbol_name = *pnode.operand->toString();
-				PVariable variable = lookup_symbol(symbol_name.value);
-				if (!variable.type.is_set()) {
-					set_error(pnode.operand, "invalid symbol name for '*' operator");
-					break;
-				} else if (!variable.type.is_pointer) {
-					set_error(pnode.operand, "tried to dereference non-pointer type");
-					break;
-				}
-
-				result.type = variable.type;
-				result.type.is_pointer = false;
-				Value *address = builder->CreateLoad(variable.llvmval);
-				result.llvmval = builder->CreateLoad(address);
+				result.type = value.type;
+				result.type.pointer_level -= 1;
+				result.llvmval = builder->CreateLoad(value.llvmval);
 				break;
 			} else if (!strcmp(pnode.value, "+")) {
 				PValue value = generate_expression(pnode.operand);

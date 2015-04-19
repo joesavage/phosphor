@@ -49,12 +49,12 @@ struct PType {
 
 struct PExType {
 	const char *type_name;
-	bool is_pointer; // TODO: What about pointers to pointers? Use a 'uint'?
+	unsigned int pointer_level;
 	// TODO: Other modifiers (possibly bitflag all modifiers in future)
 
-	PExType(const char *type_name = NULL, bool is_pointer = false) {
+	PExType(const char *type_name = NULL, int pointer_level = 0) {
 		this->type_name = type_name;
-		this->is_pointer = is_pointer;
+		this->pointer_level = pointer_level;
 	}
 
 	inline bool is_set() {
@@ -68,8 +68,10 @@ struct PExType {
 		size_t buf_len = 255;
 		char *result = (char *)heap_alloc(buf_len);
 		strncpy(result, type_name, buf_len);
-		if (is_pointer)
-			strncpy(result + strlen(type_name), "^", buf_len);
+		for (unsigned int i = 0; i < pointer_level; ++i)
+			strncpy(result + strlen(type_name) + i,
+			        "^",
+			        buf_len - strlen(type_name) - i);
 
 		// Can handle other modifiers here
 
@@ -78,7 +80,7 @@ struct PExType {
 
 	bool operator==(const PExType &ty) {
 		return !strcmp(ty.type_name, type_name)
-		    && ty.is_pointer == is_pointer;
+		    && ty.pointer_level == pointer_level;
 	}
 	bool operator!=(const PExType &ty) { return !(*this == ty); }
 };
