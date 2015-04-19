@@ -155,7 +155,11 @@ bool CodeGenerator::explicit_type_convert(PValue *source,
 	return false;
 }
 
-PVariable CodeGenerator::generate_variable_declaration(ASTNode *node) {
+// NOTE: This generates mis-matching types and values - the caller should beware
+// that the type returned is for the loaded value, not the value returned (as,
+// in the context of this member function, the loaded value is the thing of
+// importance).
+PVariable CodeGenerator::generate_lvalue(ASTNode *node) {
 	PVariable result;
 
 	switch (node->type) {
@@ -174,7 +178,7 @@ PVariable CodeGenerator::generate_variable_declaration(ASTNode *node) {
 
 			PValue value;
 			if (pnode.init) {
-				value = generate_expression(pnode.init);
+				value = generate_rvalue(pnode.init);
 				if (error) {
 					break;
 				} else if (variable_extype.is_set()) {
@@ -204,6 +208,39 @@ PVariable CodeGenerator::generate_variable_declaration(ASTNode *node) {
 				builder->CreateStore(value.llvmval, result.llvmval);
 			break;
 		}
+		case NODE_IDENTIFIER:
+		{
+			auto pnode = *node->toString();
+			PVariable value = lookup_symbol(pnode.value);
+			if (!value.type.is_set()) {
+				set_error(node, "failed to find symbol '%s'", pnode.value);
+				break;
+			}
+
+			result.type = value.type;
+			result.llvmval = value.llvmval;
+			break;
+		}
+		case NODE_UNARY_OPERATOR:
+		{
+			auto pnode = *node->toUnaryOperator();
+
+			if (!strcmp(pnode.value, "*")) {
+				PValue value = generate_rvalue(pnode.operand);
+
+				if (!value.type.pointer_level) {
+					set_error(pnode.operand, "cannot dereference non-pointer operand");
+					break;
+				}
+				result.type = value.type;
+				result.type.pointer_level -= 1;
+				result.llvmval = (AllocaInst *)value.llvmval;
+				break;
+			}
+
+			set_error(node, "unsupported unary operator '%s'", pnode.value);
+			break;
+		}
 		default:
 			set_error(node, "failed to generate variable for ASTNode");
 			break;
@@ -212,7 +249,7 @@ PVariable CodeGenerator::generate_variable_declaration(ASTNode *node) {
 	return result;
 }
 
-PValue CodeGenerator::generate_expression(ASTNode *node) {
+PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 	PValue result;
 
 	switch (node->type) {
@@ -222,34 +259,36 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 
 			// TODO: Handle other operators (+=, etc.)
 			if (!strcmp(pnode.value, "=")) {
-				auto symbol_name = *pnode.left->toString();
-				PVariable var_sym = lookup_symbol(symbol_name.value);
-				if (!var_sym.type.is_set()) {
-					set_error(pnode.left, "invalid symbol name for assignment");
+				// TODO: God fucking damn it. We need the lvalue here (AllocaInst *) not
+				// the 'Value *' from the load.
+				PVariable left = generate_lvalue(pnode.left);
+				if (!isa<AllocaInst>(left.llvmval)) {
+					set_error(pnode.left, "value on left of assignment is not an lvalue");
 					break;
 				}
-				PValue value = generate_expression(pnode.right);
+
+				PValue value = generate_rvalue(pnode.right);
 				if (error)
 					break;
 
-				if (!implicit_type_convert(&value, var_sym.type)) {
+				if (!implicit_type_convert(&value, left.type)) {
 					set_error(pnode.right, "type mismatch in assignment - expected '%s', "
-					          "got '%s'", var_sym.type.to_string(),
+					          "got '%s'", left.type.to_string(),
 					          value.type.to_string());
 					break;
 				}
 
-				builder->CreateStore(value.llvmval, var_sym.llvmval);
+				builder->CreateStore(value.llvmval, (AllocaInst *)left.llvmval);
 				result.type = value.type;
 				result.llvmval = value.llvmval;
 				break;
 			}
 
 
-			PValue left = generate_expression(pnode.left);
+			PValue left = generate_rvalue(pnode.left);
 			if (error)
 				break;
-			PValue right = generate_expression(pnode.right);
+			PValue right = generate_rvalue(pnode.right);
 			if (error)
 				break;
 
@@ -374,18 +413,12 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 				result.llvmval = variable.llvmval;
 				break;
 			} else if (!strcmp(pnode.value, "*")) {
-				PValue value = generate_expression(pnode.operand);
-
-				if (!value.type.pointer_level) {
-					set_error(pnode.operand, "cannot dereference non-pointer operand");
-					break;
-				}
+				PVariable value = generate_lvalue(node);
 				result.type = value.type;
-				result.type.pointer_level -= 1;
 				result.llvmval = builder->CreateLoad(value.llvmval);
 				break;
 			} else if (!strcmp(pnode.value, "+")) {
-				PValue value = generate_expression(pnode.operand);
+				PValue value = generate_rvalue(pnode.operand);
 				PType type = lookup_type(value.type);
 				if (!type.is_numeric) {
 					set_error(node, "'+' may only be used on numeric types");
@@ -402,7 +435,7 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 		case NODE_CAST_OPERATOR:
 		{
 			auto pnode = *node->toCastOperator();
-			PValue value = generate_expression(pnode.operand);
+			PValue value = generate_rvalue(pnode.operand);
 			if (error)
 				break;
 			if (!explicit_type_convert(&value, pnode.type)) {
@@ -437,7 +470,7 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 
 			MemoryList<Value *> args(args_count);
 			for (size_t i = 0; i < args_count; ++i) {
-				PValue arg = generate_expression(pnode.args[i]);
+				PValue arg = generate_rvalue(pnode.args[i]);
 				if (error)
 					break;
 				if (!implicit_type_convert(&arg, pfunction.arg_types[i])) {
@@ -521,12 +554,7 @@ PValue CodeGenerator::generate_expression(ASTNode *node) {
 		case NODE_IDENTIFIER:
 		{
 			auto pnode = *node->toString();
-			PVariable value = lookup_symbol(pnode.value);
-			if (!value.type.is_set()) {
-				set_error(node, "failed to find symbol '%s'", pnode.value);
-				break;
-			}
-
+			PVariable value = generate_lvalue(node);
 			result.type = value.type;
 			result.llvmval = builder->CreateLoad(value.llvmval, pnode.value);
 			break;
@@ -643,7 +671,7 @@ PFunction CodeGenerator::generate_function(ASTNode *node) {
 				Function::arg_iterator it;
 				size_t i;
 				for (it = funcval->arg_begin(), i = 0; i < args.size(); ++i, ++it) {
-					generate_variable_declaration(args[i]);
+					generate_lvalue(args[i]);
 					if (error)
 						break;
 
@@ -697,22 +725,22 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 		}
 		case NODE_UNARY_OPERATOR:
 		case NODE_BINARY_OPERATOR:
-			generate_expression(node);
+			generate_rvalue(node);
 			break;
 		case NODE_FUNCTION_SIGNATURE:
 		case NODE_FUNCTION:
 			generate_function(node);
 			break;
 		case NODE_FUNCTION_CALL:
-			generate_expression(node);
+			generate_rvalue(node);
 			break;
 		case NODE_VARIABLE_DECLARATION:
-			generate_variable_declaration(node);
+			generate_lvalue(node);
 			break;
 		case NODE_IF:
 		{
 			auto pnode = *node->toConditional();
-			PValue cond = generate_expression(pnode.condition);
+			PValue cond = generate_rvalue(pnode.condition);
 			if (error)
 				break;
 			if (lookup_type(cond) != lookup_type("bool")) {
@@ -765,7 +793,7 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 			builder->CreateBr(preloop);
 
 			builder->SetInsertPoint(preloop);
-			PValue cond = generate_expression(pnode.condition);
+			PValue cond = generate_rvalue(pnode.condition);
 			if (error)
 				break;
 
@@ -796,7 +824,7 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 			auto pnode = *node->toUnaryOperator();
 			PValue val;
 			if (pnode.operand) {
-				val = generate_expression(pnode.operand);
+				val = generate_rvalue(pnode.operand);
 				if (error)
 					break;
 			} else {

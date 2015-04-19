@@ -23,8 +23,8 @@ struct CodeGenerator {
 	void generate();
 private:
 	void generate_statement(ASTNode *node);
-	PVariable generate_variable_declaration(ASTNode *node);
-	PValue generate_expression(ASTNode *node);
+	PVariable generate_lvalue(ASTNode *node);
+	PValue generate_rvalue(ASTNode *node);
 	PFunction generate_function(ASTNode *node);
 	PType lookup_type(PValue value);
 	PType lookup_type(PExType extype);
