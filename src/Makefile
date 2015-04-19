@@ -8,7 +8,7 @@ OBJECTS=$(SOURCES:.cpp=.o)
 # TODO: Actually think through dependencies properly.
 # I've had a fair few bugs due to poor Makefile dependencies so far.
 
-phosphor: $(OBJECTS)
+phosphor: clean $(OBJECTS)
 	$(CC) $(LDFLAGS) -o phosphor $(OBJECTS) $(LDLIBS) 
 
 compiler.o: compiler.cpp parser.h lex.cpp lex.h hashmap.hpp helpers.h memoryarena.h memorylist.hpp
