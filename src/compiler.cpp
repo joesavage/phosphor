@@ -167,12 +167,14 @@ int main() {
 	CodeGenerator generator = {};
 
 	// TODO: Evaluate this initial size
-	MemoryArena transient_memory; //(2097152)
+	MemoryArena transient_memory(2097152);
 	lexer.memory = &transient_memory;
 	parser.memory = &transient_memory;
 
 	HashMap<POperator> &unary_operators = parser.unary_operators;
 	unary_operators.size = 16;
+
+	// TODO: Think about precedence properly at some point
 	unary_operators.set("+",  POperator(POperator::UNARY, POperator::IMPLICIT_ASSOC, 1));
 	unary_operators.set("-",  POperator(POperator::UNARY, POperator::IMPLICIT_ASSOC, 1));
 	unary_operators.set("!",  POperator(POperator::UNARY, POperator::IMPLICIT_ASSOC, 2));
