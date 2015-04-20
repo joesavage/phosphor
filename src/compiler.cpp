@@ -166,8 +166,7 @@ int main() {
 	Parser parser = {};
 	CodeGenerator generator = {};
 
-	// TODO: Evaluate this initial size
-	MemoryArena transient_memory(2097152);
+	MemoryArena transient_memory(2097152); // TODO: Evaluate this initial size
 	lexer.memory = &transient_memory;
 	parser.memory = &transient_memory;
 

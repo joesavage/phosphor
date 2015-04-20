@@ -259,8 +259,6 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 
 			// TODO: Handle other operators (+=, etc.)
 			if (!strcmp(pnode.value, "=")) {
-				// TODO: God fucking damn it. We need the lvalue here (AllocaInst *) not
-				// the 'Value *' from the load.
 				PVariable left = generate_lvalue(pnode.left);
 				if (!isa<AllocaInst>(left.llvmval)) {
 					set_error(pnode.left, "value on left of assignment is not an lvalue");
@@ -414,8 +412,6 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 
 			// TODO: What if we have an unsigned type negated by a unary operator?
 			// (Particularly, if we're negating an int literal)
-		
-			// TODO: Eventually handle dereference operator here.
 
 			if (!strcmp(pnode.value, "&")) {
 				if (pnode.operand->type != NODE_IDENTIFIER) {
@@ -613,7 +609,6 @@ PFunction CodeGenerator::generate_function(ASTNode *node) {
 			if (error)
 				break;
 
-			// TODO: Need to handle redefinitions
 			char *function_name = pnode.name->toString()->value;
 			PExType extype = pnode.type;
 			FunctionType *function_type;
@@ -641,6 +636,12 @@ PFunction CodeGenerator::generate_function(ASTNode *node) {
 				if (!pfunction.return_type.is_set()) {
 					set_error(pnode.name,
 					          "conflict between LLVM and function table state");
+					break;
+				}
+
+				if (pfunction.return_type != extype) {
+					set_error(node,
+					          "redefinition of function with differing return type");
 					break;
 				}
 
@@ -683,7 +684,7 @@ PFunction CodeGenerator::generate_function(ASTNode *node) {
 			                                    function.llvmval);
 			builder->SetInsertPoint(BB);
 
-			Environment *prev_env = env; // TODO: Helper for env push/pop
+			Environment *prev_env = env;
 			env = pnode.signature->toFunctionSignature()->env;
 
 			{
