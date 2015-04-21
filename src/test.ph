@@ -1,5 +1,4 @@
 fn putchar(int32 ch) -> int32;
-fn putchar(int32 ch) -> int64;
 
 fn main() -> int32 {
 	int32 i = 5;
@@ -10,5 +9,5 @@ fn main() -> int32 {
 		i = i - 1;
 	}
 
-	return result;
+	return *(resultptr + 1);
 }

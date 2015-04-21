@@ -16,6 +16,8 @@
 
 using namespace llvm;
 
+// TODO: Clean up this whole file. It needs to be a lot tighter than current.
+
 // TODO: The quality of errors in here needs improving.
 
 // TODO: At some point, we need to focus on quality of the LLVM IR generated.
@@ -227,6 +229,8 @@ PVariable CodeGenerator::generate_lvalue(ASTNode *node) {
 
 			if (!strcmp(pnode.value, "*")) {
 				PValue value = generate_rvalue(pnode.operand);
+				if (error)
+					break;
 
 				if (!value.type.pointer_level) {
 					set_error(pnode.operand, "cannot dereference non-pointer operand");
@@ -290,43 +294,43 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 			if (error)
 				break;
 
-			// TODO: Ensure these binop cast rules are sensible at some point.
 			PType left_type = lookup_type(left);
 			PType right_type = lookup_type(right);
-			bool cast_left = (!left_type.is_signed && right_type.is_signed)
-			              || (left_type.numbits < right_type.numbits)
-			              || (right_type.is_float);
-			bool cast_success = false;
-			if (cast_left)
-				cast_success = implicit_type_convert(&left, right.type);
-			else
-				cast_success = implicit_type_convert(&right, left.type);
 
-			if (!cast_success) {
-				set_error(pnode.right, "type mismatch in binary operation - expected "
-				          "'%s', got '%s'", left.type.to_string(),
-				          right.type.to_string());
-				break;
+			// TODO: Handle pointer (+ other modifiers?) in operations!
+			// TODO: Pointer subtraction at some point. Plus, clean up all this type
+			// code - particularly with regards to pointers, modifiers, etc.
+			if (left.type.pointer_level) {
+				if (strcmp(pnode.value, "+")) {
+					set_error(node, "pointer types are not yet supported in non-plus "
+					          "binary expressions.");
+					break;
+				}
+			} else {
+				// TODO: Ensure these binop cast rules are sensible at some point.
+				bool cast_left = (!left_type.is_signed && right_type.is_signed)
+				              || (left_type.numbits < right_type.numbits)
+				              || (right_type.is_float);
+				bool cast_success = false;
+				if (cast_left)
+					cast_success = implicit_type_convert(&left, right.type);
+				else
+					cast_success = implicit_type_convert(&right, left.type);
+
+				if (!cast_success) {
+					set_error(pnode.right, "type mismatch in binary operation - expected "
+					          "'%s', got '%s'", left.type.to_string(),
+					          right.type.to_string());
+					break;
+				}
 			}
 
 			PExType extype = left.type;
-			PType type = lookup_type(extype);
-			if (!type.is_numeric) {
+			PType type = lookup_type(left.type);
+			if (!type.is_numeric && !extype.pointer_level) {
 				set_error(pnode.right,
 				          "non-numeric type '%s' specified for binary operation",
 				          left.type.to_string());
-				break;
-			}
-
-			// TODO: Handle pointer (+ other modifiers?) in operations!
-			// NOTE: This may be harder than I expected as it appears that it's the
-			// 'getelementptr' instruction that actually gets given the offset, not
-			// the pointers themselves. Additionally, 'pointer - pointer' shouldn't be
-			// too hard in theory, but I'm not sure what type it should return.
-			// This is all non-trivial, take a little while to think about it!
-			if (extype.pointer_level) {
-				set_error(node, "pointer types are not yet supported in binary "
-				          "expressions.");
 				break;
 			}
 			
@@ -373,7 +377,9 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 					result.llvmval = builder->CreateICmpUGT(left.llvmval,
 					                                       right.llvmval, "gttmp");
 			} else if (!strcmp(pnode.value, "+")) {
-				if (type.is_float)
+				if (extype.pointer_level)
+					result.llvmval = builder->CreateGEP(left.llvmval, right.llvmval);
+				else if (type.is_float)
 					result.llvmval = builder->CreateFAdd(left.llvmval,
 					                                     right.llvmval, "addtmp");
 				else
@@ -432,6 +438,8 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 				break;
 			} else if (!strcmp(pnode.value, "*")) {
 				PVariable value = generate_lvalue(node);
+				if (error)
+					break;
 				result.type = value.type;
 				result.llvmval = builder->CreateLoad(value.llvmval);
 				break;
