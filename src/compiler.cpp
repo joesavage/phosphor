@@ -241,7 +241,7 @@ int main() {
 	// faster and cleaner code.
 
 	// TODO: Do we want to read the WHOLE text file into memory at once? Hmm...
-	lexer.source = read_file("test.ph");
+	lexer.source = read_file("main.ph");
 
 	// Lexing
 	parser.tokens = lexer.lex(&parser.token_count);
