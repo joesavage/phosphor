@@ -1,7 +1,7 @@
 CC=clang++
 CPPFLAGS= `/usr/local/opt/llvm/bin/llvm-config --cxxflags` -I/usr/local/opt/llvm/include -g -O0 -Wall -Wextra -Werror -pedantic -Wno-missing-braces -Wno-nested-anon-types -Wno-unused-function -Wno-unused-parameter -Wno-c++11-compat-deprecated-writable-strings -Wno-writable-strings
 LDFLAGS=`/usr/local/opt/llvm/bin/llvm-config --ldflags`
-LDLIBS=`/usr/local/opt/llvm/bin/llvm-config --libs core native --system-libs`
+LDLIBS=`/usr/local/opt/llvm/bin/llvm-config --libs core native bitwriter --system-libs`
 SRCDIR=src
 DESTDIR=src
 SOURCES=$(wildcard $(SRCDIR)/*.cpp)

@@ -2,6 +2,8 @@
 #include "parser.h"
 #include "codegen.h"
 
+#include "llvm/Support/raw_ostream.h"
+#include "llvm/Bitcode/ReaderWriter.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
@@ -25,6 +27,15 @@ static char *read_file(char *path) {
 		fatal_error("failed to read file '%s'\n", path);
 
 	return buffer;
+}
+
+static void write_module_to_file(Module *module, const char *path) {
+	// TODO: File complications & errors, etc.
+	FILE *file = fopen(path, "wb+");
+	int fno = fileno(file);
+	llvm::raw_fd_ostream ostream(fno, false);
+	llvm::raw_ostream *ostreamptr = (llvm::raw_ostream *)&ostream;
+	WriteBitcodeToFile(module, *ostreamptr);
 }
 
 static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
@@ -279,7 +290,7 @@ int main() {
 	 // Code Generation
 	printf("\nLLVM IR: \n");
 	generator.env = parser.env;
-	generator.generate();
+	Module *module = generator.generate();
 	if (generator.error) {
 		if (generator.errnode)
 			fatal_error("Codegen failed at line %d, col %d: %s\n",
@@ -289,7 +300,13 @@ int main() {
 			fatal_error("Codegen error: %s\n", generator.error);
 	}
 
-	// parser.memory->free();
+	// TODO: Set filename and debug level in CLI flags.
+	module->dump();
+	const char *output_filename = "test.bc";
+	write_module_to_file(module, output_filename);
+
+	delete module;
+	parser.memory->free();
 
 	return 0;	
 }

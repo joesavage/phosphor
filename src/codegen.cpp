@@ -890,7 +890,7 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 	}
 }
 
-void CodeGenerator::generate() {
+Module *CodeGenerator::generate() {
 	InitializeNativeTarget();
   InitializeNativeTargetAsmPrinter();
   InitializeNativeTargetAsmParser();
@@ -908,6 +908,7 @@ void CodeGenerator::generate() {
 
 	// TODO: Think about (and extend) code passes (optimisation, etc.)
 	// Additionally, the order of these needs to be properly thought about!
+	// TODO: Perform optimisations based on passed optimisation flags.
 	FunctionPassManager fpm(module);
 	fpm.add(createBasicAliasAnalysisPass());
 	fpm.add(createPromoteMemoryToRegisterPass());
@@ -922,9 +923,8 @@ void CodeGenerator::generate() {
 
 	generate_statement(root);
 	if (error)
-		return;
+		return NULL;
 	verifyModule(*module);
 
-	module->dump();
-	delete module;
+	return module;
 }

@@ -1,2 +1,4 @@
 *.o
+*.bc
+*.ll
 phosphor
