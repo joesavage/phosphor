@@ -22,9 +22,9 @@ struct HashMap {
 	HashMap(size_t initial_size = 128);
 	void destroy();
 	bool resize(size_t new_size);
-	bool set(char *key, T value);
-	bool exists(char *key);
-	HashNode<T> *operator[](char *key);
+	bool set(const char *key, T value);
+	bool exists(const char *key);
+	HashNode<T> *operator[](const char *key);
 };
  
 // Implementation
@@ -75,7 +75,7 @@ bool HashMap<T>::resize(size_t new_size) {
 // TODO: Factor out the searching code. Too much code repetition for my liking.
 
 template <typename T>
-bool HashMap<T>::set(char *key, T value) {
+bool HashMap<T>::set(const char *key, T value) {
 	if (!key || !size)
 		return false;
 
@@ -107,7 +107,7 @@ bool HashMap<T>::set(char *key, T value) {
 }
 
 template <typename T>
-HashNode<T> *HashMap<T>::operator[](char *key) {
+HashNode<T> *HashMap<T>::operator[](const char *key) {
 	if (!buckets || !key || !size)
 		return NULL;
 
@@ -121,7 +121,7 @@ HashNode<T> *HashMap<T>::operator[](char *key) {
 }
 
 template <typename T>
-bool HashMap<T>::exists(char *key) {
+bool HashMap<T>::exists(const char *key) {
 	if (!buckets || !key || !size)
 		return false;
 

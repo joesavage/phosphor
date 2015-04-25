@@ -52,7 +52,7 @@ class ASTNode {
 			ASTNode *right;
 		} binary_operator;
 		struct cast_operator {
-			PExType type;
+			PType type;
 			ASTNode *operand;
 		} cast_operator;
 		struct statements {
@@ -63,7 +63,7 @@ class ASTNode {
 			Environment *env;
 		} block;
 		struct variable_declaration {
-			PExType type;
+			PType type;
 			ASTNode *name;
 			ASTNode *init;
 		} variable_declaration;
@@ -78,7 +78,7 @@ class ASTNode {
 		} function;
 		struct function_signature {
 			ASTNode *name;
-			PExType type;
+			PType type;
 			MemoryList<ASTNode *> args;
 			Environment *env;
 			// TODO: Function modifiers
@@ -88,7 +88,7 @@ class ASTNode {
 			MemoryList<ASTNode *> args;
 		} function_call;
 		struct type {
-			PExType value;
+			PType value;
 		} type;
 	} data;
 

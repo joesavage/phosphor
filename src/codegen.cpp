@@ -36,24 +36,11 @@ void CodeGenerator::set_error(ASTNode *node, const char *format, ...) {
 	errnode = node;
 }
 
-PType CodeGenerator::lookup_type(PValue value) {
-	return lookup_type(value.type);
+PBaseType *CodeGenerator::lookup_base_type(char *name) {
+	return search_for_type(*env, name);
 }
 
-PType CodeGenerator::lookup_type(PExType extype) {
-	PType result;
-	PType *type = search_for_type(*env, const_cast<char *>(extype.type_name));
-	if (type) {
-		result = *type;
-		for (unsigned int i = 0; i < extype.pointer_level; ++i)
-			result.llvmty = PointerType::get(result.llvmty, 0);
-
-		// Other modifiers can go here
-	}
-
-	return result;
-}
-
+// TODO: I think maybe the following two should use pointer semantics.
 PFunction CodeGenerator::lookup_function(char *name) {
 	PFunction *function = search_for_function(*env, name);
 	return function ? *function : PFunction();
@@ -66,9 +53,9 @@ PVariable CodeGenerator::lookup_symbol(char *name) {
 
 PValue CodeGenerator::get_boolean_value(bool value) {
 	PValue result;
-	result.type = PExType("bool");
+	result.type = PType(lookup_base_type("bool"));
 	result.llvmval = ConstantInt::get(getGlobalContext(),
-	                                  APInt(lookup_type(result.type).numbits,
+	                                  APInt(result.type.base_type->numbits,
 	                                  value));
 	return result;
 }
@@ -86,44 +73,50 @@ AllocaInst *CodeGenerator::create_entry_block_alloca(char *name, Type *type) {
 }
 
 bool CodeGenerator::implicit_type_convert(PValue *source,
-                                          PExType dest_extype)
+                                          PType dest_type)
 {
-	PType source_type = lookup_type(source->type);
-	PType dest_type = lookup_type(dest_extype);
-	if (source_type == dest_type)
+	if (source->type == dest_type)
 		return true;
+
+	PBaseType *source_base = source->type.base_type;
+	PBaseType *dest_base = dest_type.base_type;
+	Type *source_llvm = source->type.getLLVMType();
+	Type *dest_llvm = dest_type.getLLVMType();
 
 	// Pointers can only cast to themselves at the moment, so this check works
 	// fine. Will likely need to change this as other modifiers get introduced.
-	if (source->type.pointer_level != dest_extype.pointer_level)
+	if (source->type.pointer_level != dest_type.pointer_level)
 		return false;
 
-	if (source_type.is_numeric && dest_type.is_numeric) {
+	if (source_base->is_numeric && dest_base->is_numeric) {
 		// TODO: Consider whether integer to float implicit conversion is a good
 		// idea or not.
 		// TODO: This big unwieldy condition can probably be simplified down!
-		if ((((source_type.is_signed == dest_type.is_signed
-		 && (!source_type.is_float))
-		 || (source_type.is_float && dest_type.is_float))
-		 && ((source_type.numbits <= dest_type.numbits)
-		 || (!source_type.is_float && dest_type.is_float)))
+		if ((((source_base->is_signed == dest_base->is_signed
+		 && (!source_base->is_float))
+		 || (source_base->is_float && dest_base->is_float))
+		 && ((source_base->numbits <= dest_base->numbits)
+		 || (!source_base->is_float && dest_base->is_float)))
 
 		 // NOTE: unsigned->signed conversions are allowed if there is no possible
 		 // truncation. implicit signed->unsigned conversions are disallowed.
 		 // TODO: Should we be more relaxed with this check? I'm unsure.
-		 || ((!source_type.is_signed && dest_type.is_signed)
-		 && (dest_type.numbits - 1 >= source_type.numbits))) {
+		 || ((!source_base->is_signed && dest_base->is_signed)
+		 && (dest_base->numbits - 1 >= source_base->numbits))) {
 			// We could easily create the cast instructions manually rather than
 			// relying on 'getCastOpcode' here if required (Trunc, ZExt/SExt, etc.).
-			if (CastInst::isCastable(source_type.llvmty, dest_type.llvmty)) {
-				source->type = dest_extype;
+			if (CastInst::isCastable(source_llvm, dest_llvm)) {
+				source->type = dest_type;
 				auto cast_opcode = CastInst::getCastOpcode(source->llvmval,
-				                                           source_type.is_signed,
-				                                           dest_type.llvmty,
-				                                           dest_type.is_signed);
+				                                           source_base->is_signed,
+				                                           dest_llvm,
+				                                           dest_base->is_signed);
 				source->llvmval = builder->CreateCast(cast_opcode,
 				                                      source->llvmval,
-				                                      dest_type.llvmty);
+				                                      dest_llvm);
+
+				assert(source->type.getLLVMType() == dest_type.getLLVMType());
+				assert(source->llvmval->getType() == dest_type.getLLVMType());
 				return true;
 			}
 		}
@@ -133,24 +126,30 @@ bool CodeGenerator::implicit_type_convert(PValue *source,
 }
 
 bool CodeGenerator::explicit_type_convert(PValue *source,
-                                          PExType dest_extype)
+                                          PType dest_type)
 {
-	PType source_type = lookup_type(source->type);
-	PType dest_type = lookup_type(dest_extype);
-	if (source_type == dest_type)
+	if (source->type == dest_type)
 		return true;
+
+	PBaseType *source_base = source->type.base_type;
+	PBaseType *dest_base = dest_type.base_type;
+	Type *source_llvm = source->type.getLLVMType();
+	Type *dest_llvm = dest_type.getLLVMType();
 
 	// For now, we'll just do any casts that LLVM thinks we can do.
 	// Think about this more in future (incl. bitcasts, etc.).
-	if (CastInst::isCastable(source_type.llvmty, dest_type.llvmty)) {
-		source->type = dest_extype;
+	if (CastInst::isCastable(source_llvm, dest_llvm)) {
+		source->type = dest_type;
 		auto cast_opcode = CastInst::getCastOpcode(source->llvmval,
-		                                           source_type.is_signed,
-		                                           dest_type.llvmty,
-		                                           dest_type.is_signed);
+		                                           source_base->is_signed,
+		                                           dest_llvm,
+		                                           dest_base->is_signed);
 		source->llvmval = builder->CreateCast(cast_opcode,
 		                                      source->llvmval,
-		                                      dest_type.llvmty);
+		                                      dest_llvm);
+
+		assert(source->type.getLLVMType() == dest_type.getLLVMType());
+		assert(source->llvmval->getType() == dest_type.getLLVMType());
 		return true;
 	}
 
@@ -169,10 +168,10 @@ PVariable CodeGenerator::generate_lvalue(ASTNode *node) {
 		{
 			auto pnode = *node->toVariableDeclaration();
 			char *variable_name = pnode.name->toString()->value;
-			PExType variable_extype;
+			PType variable_type;
 			if (pnode.type.is_set())
-				variable_extype = pnode.type;
-			assert(variable_extype.is_set() || pnode.init);
+				variable_type = pnode.type;
+			assert(variable_type.is_set() || pnode.init);
 			if (env->symbol_table.exists(variable_name)) {
 				set_error(pnode.name, "variable naming conflict");
 				break;
@@ -183,10 +182,10 @@ PVariable CodeGenerator::generate_lvalue(ASTNode *node) {
 				value = generate_rvalue(pnode.init);
 				if (error) {
 					break;
-				} else if (variable_extype.is_set()) {
-					if (!implicit_type_convert(&value, variable_extype)) {
+				} else if (variable_type.is_set()) {
+					if (!implicit_type_convert(&value, variable_type)) {
 						set_error(pnode.init, "type mismatch in variable initialization - "
-						          "expected '%s', got '%s'", variable_extype.to_string(),
+						          "expected '%s', got '%s'", variable_type.to_string(),
 					            value.type.to_string());
 						break;
 					}
@@ -197,13 +196,13 @@ PVariable CodeGenerator::generate_lvalue(ASTNode *node) {
 					result.type = value.type;
 				}
 			}
-			if (variable_extype.is_set())
-				result.type = variable_extype;
+			if (variable_type.is_set())
+				result.type = variable_type;
 
 			// alloca at the entry block so that the mem2reg pass can hit
-			PType variable_type = lookup_type(result.type);
+			Type *variable_llvm_type = result.type.getLLVMType();
 			result.llvmval = create_entry_block_alloca(variable_name,
-			                                           variable_type.llvmty);
+			                                           variable_llvm_type);
 			env->symbol_table.set(variable_name, result);
 
 			if (pnode.init)
@@ -294,8 +293,8 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 			if (error)
 				break;
 
-			PType left_type = lookup_type(left);
-			PType right_type = lookup_type(right);
+			PBaseType *left_base_type = left.type.base_type;
+			PBaseType *right_base_type = right.type.base_type;
 
 			// TODO: Handle pointer (+ other modifiers?) in operations!
 			// TODO: Pointer subtraction at some point. Plus, clean up all this type
@@ -308,9 +307,9 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 				}
 			} else {
 				// TODO: Ensure these binop cast rules are sensible at some point.
-				bool cast_left = (!left_type.is_signed && right_type.is_signed)
-				              || (left_type.numbits < right_type.numbits)
-				              || (right_type.is_float);
+				bool cast_left = (!left_base_type->is_signed && right_base_type->is_signed)
+				              || (left_base_type->numbits < right_base_type->numbits)
+				              || (right_base_type->is_float);
 				bool cast_success = false;
 				if (cast_left)
 					cast_success = implicit_type_convert(&left, right.type);
@@ -325,9 +324,9 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 				}
 			}
 
-			PExType extype = left.type;
-			PType type = lookup_type(left.type);
-			if (!type.is_numeric && !extype.pointer_level) {
+			PType type = left.type;
+			PBaseType *base_type = type.base_type;
+			if (!base_type->is_numeric && !type.pointer_level) {
 				set_error(pnode.right,
 				          "non-numeric type '%s' specified for binary operation",
 				          left.type.to_string());
@@ -339,71 +338,71 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 			// is the correct decision here, but I'm not entirely sure. Check!
 			result.type = left.type;
 			if (!strcmp(pnode.value, "==")) {
-				result.type = PExType("bool");
-				if (type.is_float)
+				result.type = PType(lookup_base_type("bool"));
+				if (base_type->is_float)
 					result.llvmval = builder->CreateFCmpOEQ(left.llvmval,
 					                                        right.llvmval, "eqtmp");
 				else
 					result.llvmval = builder->CreateICmpEQ(left.llvmval,
 					                                       right.llvmval, "eqtmp");
 			} else if (!strcmp(pnode.value, "!=")) {
-				result.type = PExType("bool");
-				if (type.is_float)
+				result.type = PType(lookup_base_type("bool"));
+				if (base_type->is_float)
 					result.llvmval = builder->CreateFCmpONE(left.llvmval,
 					                                        right.llvmval, "neqtmp");
 				else
 					result.llvmval = builder->CreateICmpNE(left.llvmval,
 					                                       right.llvmval, "neqtmp");
 			} else if (!strcmp(pnode.value, "<")) {
-				result.type = PExType("bool");
-				if (type.is_float)
+				result.type = PType(lookup_base_type("bool"));
+				if (base_type->is_float)
 					result.llvmval = builder->CreateFCmpOLT(left.llvmval,
 					                                        right.llvmval, "lttmp");
-				else if (type.is_signed)
+				else if (base_type->is_signed)
 					result.llvmval = builder->CreateICmpSLT(left.llvmval,
 					                                       right.llvmval, "lttmp");
 				else
 					result.llvmval = builder->CreateICmpULT(left.llvmval,
 					                                       right.llvmval, "lttmp");
 			} else if (!strcmp(pnode.value, ">")) {
-				result.type = PExType("bool");
-				if (type.is_float)
+				result.type = PType(lookup_base_type("bool"));
+				if (base_type->is_float)
 					result.llvmval = builder->CreateFCmpOGT(left.llvmval,
 					                                        right.llvmval, "gttmp");
-				else if (type.is_signed)
+				else if (base_type->is_signed)
 					result.llvmval = builder->CreateICmpSGT(left.llvmval,
 					                                       right.llvmval, "gttmp");
 				else
 					result.llvmval = builder->CreateICmpUGT(left.llvmval,
 					                                       right.llvmval, "gttmp");
 			} else if (!strcmp(pnode.value, "+")) {
-				if (extype.pointer_level)
+				if (type.pointer_level)
 					result.llvmval = builder->CreateGEP(left.llvmval, right.llvmval);
-				else if (type.is_float)
+				else if (base_type->is_float)
 					result.llvmval = builder->CreateFAdd(left.llvmval,
 					                                     right.llvmval, "addtmp");
 				else
 					result.llvmval = builder->CreateAdd(left.llvmval,
 					                                    right.llvmval, "addtmp");
 			} else if (!strcmp(pnode.value, "*")) {
-				if (type.is_float)
+				if (base_type->is_float)
 					result.llvmval = builder->CreateFMul(left.llvmval,
 					                                     right.llvmval, "multmp");
 				else
 					result.llvmval = builder->CreateMul(left.llvmval,
 					                                    right.llvmval, "multmp");
 			} else if (!strcmp(pnode.value, "/")) {
-				if (type.is_float)
+				if (base_type->is_float)
 					result.llvmval = builder->CreateFDiv(left.llvmval,
 					                                     right.llvmval, "divtmp");
-				else if (type.is_signed)
+				else if (base_type->is_signed)
 					result.llvmval = builder->CreateSDiv(left.llvmval,
 					                                     right.llvmval, "divtmp");
 				else
 					result.llvmval = builder->CreateUDiv(left.llvmval,
 					                                     right.llvmval, "divtmp");
 			} else if (!strcmp(pnode.value, "-")) {
-				if (type.is_float)
+				if (base_type->is_float)
 					result.llvmval = builder->CreateFSub(left.llvmval,
 					                                     right.llvmval, "subtmp");
 				else
@@ -445,8 +444,8 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 				break;
 			} else if (!strcmp(pnode.value, "+")) {
 				PValue value = generate_rvalue(pnode.operand);
-				PType type = lookup_type(value.type);
-				if (!type.is_numeric) {
+				PBaseType *base_type = value.type.base_type;
+				if (!base_type->is_numeric) {
 					set_error(node, "'+' may only be used on numeric types");
 					break;
 				}
@@ -541,28 +540,28 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 			// type they fit in.
 			int numbits = 0;
 			if (value <= 0xff) {
-				result.type = PExType("uint8");
+				result.type = PType(lookup_base_type("uint8"));
 			} else if (value <= 0xffff) {
-				result.type = PExType("uint16");
+				result.type = PType(lookup_base_type("uint16"));
 			} else if (value <= 0xffffffff) {
-				result.type = PExType("uint32");
+				result.type = PType(lookup_base_type("uint32"));
 			} else if (value <= 0xffffffffffffffff) {
-				result.type = PExType("uint64");
+				result.type = PType(lookup_base_type("uint64"));
 			} else {
 				set_error(node, "integer literal too large");
 				break;
 			}
-			numbits = lookup_type(result.type).numbits;
+			numbits = result.type.base_type->numbits;
 
 			result.llvmval = ConstantInt::get(getGlobalContext(),
 			                                  APInt(numbits, value, false));
+			assert(result.llvmval->getType() == result.type.getLLVMType());
 			break;
 		}
 		case NODE_CONSTANT_BOOL:
 		{
 			auto pnode = *node->toInteger();
 			result = get_boolean_value(pnode.value);
-			result.type = PExType("bool");
 			break;
 		}
 		case NODE_CONSTANT_FLOAT:
@@ -571,7 +570,7 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 			// TODO: Also, we probably want to deal with oversized floats or whatever
 			// here.
 			auto pnode = *node->toString();
-			result.type = PExType("float64");
+			result.type = PType(lookup_base_type("float64"));
 			APFloat number(0.0);
 			number.convertFromString(pnode.value, APFloat::rmNearestTiesToEven);
 			result.llvmval = ConstantFP::get(getGlobalContext(), number);
@@ -581,6 +580,8 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 		{
 			auto pnode = *node->toString();
 			PVariable value = generate_lvalue(node);
+			if (error)
+				break;
 			result.type = value.type;
 			result.llvmval = builder->CreateLoad(value.llvmval, pnode.value);
 			break;
@@ -608,20 +609,18 @@ PFunction CodeGenerator::generate_function(ASTNode *node) {
 			for (size_t i = 0; i < args_count; ++i) {
 				auto arg = *pnode.args[i]->toVariableDeclaration();
 
-				PExType extype = arg.type;
-				result.arg_types.add(extype);
-
-				PType type = lookup_type(extype);
-				args.add(type.llvmty);
+				PType type = arg.type;
+				result.arg_types.add(type);
+				args.add(type.getLLVMType());
 			}
 			if (error)
 				break;
 
 			char *function_name = pnode.name->toString()->value;
-			PExType extype = pnode.type;
+			PType type = pnode.type;
 			FunctionType *function_type;
 			Function *function;
-			function_type = FunctionType::get(lookup_type(extype).llvmty,
+			function_type = FunctionType::get(type.getLLVMType(),
 			                                  ArrayRef<Type *>(args.getPointer(0),
 			                                                   args_count),
 			                                  false);
@@ -647,7 +646,7 @@ PFunction CodeGenerator::generate_function(ASTNode *node) {
 					break;
 				}
 
-				if (pfunction.return_type != extype) {
+				if (pfunction.return_type != type) {
 					set_error(node,
 					          "redefinition of function with differing return type");
 					break;
@@ -660,8 +659,8 @@ PFunction CodeGenerator::generate_function(ASTNode *node) {
 					break;
 				}
 				for (size_t i = 0; i < pfunction.arg_types.size(); ++i) {
-					PType expected_type = lookup_type(pfunction.arg_types[i]);
-					PType actual_type = lookup_type(result.arg_types[i]);
+					PType expected_type = pfunction.arg_types[i];
+					PType actual_type = result.arg_types[i];
 					if (actual_type != expected_type) {
 						set_error(node, "redefinition of function with parameter mis-match "
 						          "at param %d", i);
@@ -771,17 +770,17 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 		case NODE_IF:
 		{
 			auto pnode = *node->toConditional();
+			PValue true_val = get_boolean_value(true);
 			PValue cond = generate_rvalue(pnode.condition);
 			if (error)
 				break;
-			if (lookup_type(cond) != lookup_type("bool")) {
+			if (cond.type != true_val.type) {
 				set_error(pnode.condition,
 				          "unsupported type for if statement condition: '%s'",
 				          cond.type.to_string());
 				break;
 			}
 
-			PValue true_val = get_boolean_value(true);
 			cond.llvmval = builder->CreateICmpEQ(cond.llvmval,
 			                                     true_val.llvmval, "ifcond");
 
@@ -824,11 +823,12 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 			builder->CreateBr(preloop);
 
 			builder->SetInsertPoint(preloop);
+			PValue true_val = get_boolean_value(true);
 			PValue cond = generate_rvalue(pnode.condition);
 			if (error)
 				break;
 
-			if (lookup_type(cond) != lookup_type("bool")) {
+			if (cond.type != true_val.type) {
 				set_error(pnode.condition,
 				          "unsupported type for while statement condition: %s",
 				          cond.type.to_string());
@@ -836,7 +836,7 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 			}
 
 			cond.llvmval = builder->CreateICmpEQ(cond.llvmval,
-			                                     get_boolean_value(true).llvmval,
+			                                     true_val.llvmval,
 			                                     "whilecond");
 			builder->CreateCondBr(cond.llvmval, loop, after);
 

@@ -12,12 +12,12 @@ PVariable *search_for_symbol(Environment env, char *name) {
 	return NULL;
 }
 
-PType *search_for_type(Environment env, char *name) {
+PBaseType *search_for_type(Environment env, char *name) {
 	Environment *current = &env;
-	HashNode<PType> *result;
+	HashNode<PBaseType *> *result;
 	do {
 		if ((result = current->type_table[name]))
-			return &result->value;
+			return result->value;
 	} while ((current = current->parent));
 
 	return NULL;

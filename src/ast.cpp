@@ -14,7 +14,7 @@ void ASTNode::initialise(ASTNodeType type) {
 			toBlock()->env = NULL;
 			break;
 		case NODE_VARIABLE_DECLARATION:
-			toVariableDeclaration()->type = PExType();
+			toVariableDeclaration()->type = PType();
 			toVariableDeclaration()->name = NULL;
 			toVariableDeclaration()->init = NULL;
 			break;
@@ -32,7 +32,7 @@ void ASTNode::initialise(ASTNodeType type) {
 			break;
 		case NODE_FUNCTION_SIGNATURE:
 			toFunctionSignature()->name = NULL;
-			toFunctionSignature()->type = PExType();
+			toFunctionSignature()->type = PType();
 			toFunctionSignature()->args = MemoryList<ASTNode *>();
 			toFunctionSignature()->env = NULL;
 			break;
@@ -46,7 +46,7 @@ void ASTNode::initialise(ASTNodeType type) {
 		case NODE_RETURN:
 			break;
 		case NODE_CAST_OPERATOR:
-			toCastOperator()->type = PExType();
+			toCastOperator()->type = PType();
 			toCastOperator()->operand = NULL;
 			break;
 		case NODE_UNARY_OPERATOR:
@@ -62,7 +62,7 @@ void ASTNode::initialise(ASTNodeType type) {
 			toInteger()->value = 0;
 			break;
 		case NODE_TYPE:
-			toType()->value = PExType();
+			toType()->value = PType();
 			break;
 		case NODE_IDENTIFIER:
 		case NODE_CONSTANT_INT:

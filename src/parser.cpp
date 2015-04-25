@@ -108,10 +108,10 @@ ASTNode *Parser::parse_type() {
 	if (!peek_token_type(TOKEN_IDENTIFIER))
 		return NULL;
 
-	PType *ptype = search_for_type(*env, cursor->value);
-	if (ptype) {
+	PBaseType *pbasetype = search_for_type(*env, cursor->value);
+	if (pbasetype) {
 		result = create_node(NODE_TYPE);
-		result->toType()->value = PExType(cursor->value);
+		result->toType()->value = PType(pbasetype);
 		scan_token_type(TOKEN_IDENTIFIER);
 	}
 
@@ -257,7 +257,9 @@ ASTNode *Parser::parse_atom() {
 }
 
 // Parse expressions via precedence climbing
-ASTNode *Parser::parse_expression(unsigned char minimum_precedence) {
+ASTNode *Parser::parse_expression(bool silent_mode,
+                                  unsigned char minimum_precedence)
+{
 	ASTNode *result = parse_atom();
 	if (!result || error)
 		return NULL;
@@ -284,14 +286,16 @@ ASTNode *Parser::parse_expression(unsigned char minimum_precedence) {
 		else if (associativity == POperator::LEFT_ASSOC)
 			next_minimum_precedence = precedence + 1;
 		else {
-			set_error("expected operator with associativity");
+			if (!silent_mode)
+				set_error("expected operator with associativity");
 			return NULL;
 		}
 
-		right = parse_expression(next_minimum_precedence);
+		right = parse_expression(silent_mode, next_minimum_precedence);
 
 		if (!right) {
-			set_error("expected expression after operator");
+			if (!silent_mode)
+				set_error("expected expression after operator");
 			return NULL;
 		}
 
@@ -470,11 +474,7 @@ ASTNode *Parser::parse_return() {
 	}
 
 	ASTNode *result = create_node(NODE_RETURN);
-	result->toUnaryOperator()->operand = parse_expression();
-	if (!result->toUnaryOperator()->operand)
-		error = NULL;
-	else if (error)
-		return NULL;
+	result->toUnaryOperator()->operand = parse_expression(true);
 
 	return result;
 }

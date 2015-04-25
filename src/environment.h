@@ -11,7 +11,8 @@
 
 using namespace llvm;
 
-struct PType {
+struct PBaseType {
+	const char *name;
 	Type *llvmty;
 
 	// TODO: Switch to bitmask flags?
@@ -20,7 +21,8 @@ struct PType {
 	bool is_float;
 	size_t numbits;
 
-	PType() {
+	PBaseType() {
+		name = NULL;
 		llvmty = NULL;
 		is_numeric = false;
 		is_signed = false;
@@ -28,43 +30,49 @@ struct PType {
 		numbits = 0;
 	}
 
-	PType(Type *llvmty, size_t numbits = 0, bool is_numeric = false,
-	      bool is_float = false, bool is_signed = false) {
+	PBaseType(const char *name, Type *llvmty, size_t numbits = 0,
+	          bool is_numeric = false, bool is_float = false,
+	          bool is_signed = false)
+	{
+		this->name = name;
 		this->llvmty = llvmty;
 		this->is_numeric = is_numeric;
 		this->is_float = is_float;
 		this->is_signed = is_signed;
 		this->numbits = numbits;
 	}
-
-	bool operator==(const PType &ty) {
-		return ty.llvmty == llvmty
-		    && ty.is_numeric == is_numeric
-		    && ty.is_float == is_float
-		    && ty.is_signed == is_signed
-		    && ty.numbits == numbits;
-	}
-	bool operator!=(const PType &ty) { return !(*this == ty); }
 };
 
-struct PExType {
-	const char *type_name;
+struct PType {
+	PBaseType *base_type;
 	unsigned int pointer_level;
 	// TODO: Other modifiers (possibly bitflag all modifiers in future)
 
-	PExType(const char *type_name = NULL, int pointer_level = 0) {
-		this->type_name = type_name;
+	PType(PBaseType *base_type = NULL, int pointer_level = 0) {
+		this->base_type = base_type;
 		this->pointer_level = pointer_level;
 	}
 
+	Type *getLLVMType() {
+		Type *result = base_type->llvmty;
+
+		for (unsigned int i = 0; i < pointer_level; ++i)
+			result = PointerType::get(result, 0);
+
+		// Other modifiers can go here
+
+		return result;
+	}
+
 	inline bool is_set() {
-		return type_name;
+		return base_type;
 	}
 
 	char *to_string() {
-		if (!type_name)
-			return NULL;
+		if (!base_type || !base_type->name)
+			return "(unknown)";
 
+		const char *type_name = base_type->name;
 		size_t buf_len = 255;
 		char *result = (char *)heap_alloc(buf_len);
 		strncpy(result, type_name, buf_len);
@@ -78,16 +86,16 @@ struct PExType {
 		return result;
 	}
 
-	bool operator==(const PExType &ty) {
-		return !strcmp(ty.type_name, type_name)
+	bool operator==(const PType &ty) {
+		return ty.base_type == base_type
 		    && ty.pointer_level == pointer_level;
 	}
-	bool operator!=(const PExType &ty) { return !(*this == ty); }
+	bool operator!=(const PType &ty) { return !(*this == ty); }
 };
 
 
 struct PValue {
-	PExType type;
+	PType type;
 	Value *llvmval;
 
 	PValue() {
@@ -95,14 +103,14 @@ struct PValue {
 		llvmval = NULL;
 	}
 
-	PValue(PExType type, Value *llvmval) {
+	PValue(PType type, Value *llvmval) {
 		this->type = type;
 		this->llvmval = llvmval;
 	}
 };
 
 struct PVariable {
-	PExType type;
+	PType type;
 	AllocaInst *llvmval;
 
 	PVariable() {
@@ -110,7 +118,7 @@ struct PVariable {
 		llvmval = NULL;
 	}
 
-	PVariable(char *type, AllocaInst *llvmval) {
+	PVariable(PType type, AllocaInst *llvmval) {
 		this->type = type;
 		this->llvmval = llvmval;
 	}
@@ -118,9 +126,9 @@ struct PVariable {
 
 // TODO: Function overloading should be supported here one day?
 struct PFunction {
-	PExType return_type;
+	PType return_type;
 	Function *llvmval;
-	MemoryList<PExType> arg_types;
+	MemoryList<PType> arg_types;
 	// TODO: Some state to show whether this is a binary/unary operator (or not).
 
 	PFunction() {
@@ -128,14 +136,14 @@ struct PFunction {
 		llvmval = NULL;
 	}
 
-	PFunction(char *return_type, Function *llvmval) {
+	PFunction(PType return_type, Function *llvmval) {
 		this->return_type = return_type;
 		this->llvmval = llvmval;
 	}
 };
 
 struct Environment {
-	HashMap<PType> type_table;
+	HashMap<PBaseType *> type_table;
 	HashMap<PVariable> symbol_table;
 	HashMap<PFunction> function_table;
 
@@ -146,7 +154,7 @@ struct Environment {
 };
 
 PVariable *search_for_symbol(Environment env, char *name);
-PType *search_for_type(Environment env, char *name);
+PBaseType *search_for_type(Environment env, char *name);
 PFunction *search_for_function(Environment env, char *name);
 
 #endif

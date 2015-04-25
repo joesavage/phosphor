@@ -26,13 +26,12 @@ private:
 	PVariable generate_lvalue(ASTNode *node);
 	PValue generate_rvalue(ASTNode *node);
 	PFunction generate_function(ASTNode *node);
-	PType lookup_type(PValue value);
-	PType lookup_type(PExType extype);
+	PBaseType *lookup_base_type(char *name);
 	PFunction lookup_function(char *name);
 	PVariable lookup_symbol(char *name);
 	PValue get_boolean_value(bool value);
-	bool implicit_type_convert(PValue *source, PExType dest_extype);
-	bool explicit_type_convert(PValue *source, PExType dest_extype);
+	bool implicit_type_convert(PValue *source, PType dest_extype);
+	bool explicit_type_convert(PValue *source, PType dest_extype);
 	AllocaInst *create_entry_block_alloca(char *name, Type *type);
 	void set_error(ASTNode *node, const char *format, ...);
 };

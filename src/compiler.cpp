@@ -8,6 +8,8 @@
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 
+#include <new>
+
 static char *read_file(char *path) {
 	size_t length;
 	char *buffer = NULL;
@@ -227,25 +229,38 @@ int main() {
 
 	parser.env = (Environment *)parser.memory->reserve(sizeof(Environment));
 	*parser.env = Environment();
-	HashMap<PType> &type_table = parser.env->type_table;
+	HashMap<PBaseType *> &type_table = parser.env->type_table;
 	HashMap<PVariable> &symbol_table = parser.env->symbol_table;
 	HashMap<PFunction> &function_table = parser.env->function_table;
 	symbol_table.size = 128;
 	type_table.size = 64;
 	function_table.size = 32;
 
-	type_table.set("void", PType(Type::getVoidTy(getGlobalContext()), 0));
-	type_table.set("bool", PType(Type::getInt1Ty(getGlobalContext()), 1));
-	type_table.set("int8", PType(Type::getInt8Ty(getGlobalContext()), 8, true, false, true));
-	type_table.set("int16", PType(Type::getInt16Ty(getGlobalContext()), 16, true, false, true));
-	type_table.set("int32", PType(Type::getInt32Ty(getGlobalContext()), 32, true, false, true));
-	type_table.set("int64", PType(Type::getInt64Ty(getGlobalContext()), 64, true, false, true));
-	type_table.set("uint8", PType(Type::getInt8Ty(getGlobalContext()), 8, true, false, false));
-	type_table.set("uint16", PType(Type::getInt16Ty(getGlobalContext()), 16, true, false, false));
-	type_table.set("uint32", PType(Type::getInt32Ty(getGlobalContext()), 32, true, false, false));
-	type_table.set("uint64", PType(Type::getInt64Ty(getGlobalContext()), 64, true, false, false));
-	type_table.set("float32", PType(Type::getFloatTy(getGlobalContext()), 32, true, true, true));
-	type_table.set("float64", PType(Type::getDoubleTy(getGlobalContext()), 64, true, true, true));
+	auto type_void = new ((PBaseType *)transient_memory.reserve(sizeof(PBaseType))) PBaseType("void", Type::getVoidTy(getGlobalContext()), 0);
+	auto type_bool = new ((PBaseType *)transient_memory.reserve(sizeof(PBaseType))) PBaseType("bool", Type::getInt1Ty(getGlobalContext()), 1);
+	auto type_int8 = new ((PBaseType *)transient_memory.reserve(sizeof(PBaseType))) PBaseType("int8", Type::getInt8Ty(getGlobalContext()), 8, true, false, true);
+	auto type_int16 = new ((PBaseType *)transient_memory.reserve(sizeof(PBaseType))) PBaseType("int16", Type::getInt16Ty(getGlobalContext()), 16, true, false, true);
+	auto type_int32 = new ((PBaseType *)transient_memory.reserve(sizeof(PBaseType))) PBaseType("int32", Type::getInt32Ty(getGlobalContext()), 32, true, false, true);
+	auto type_int64 = new ((PBaseType *)transient_memory.reserve(sizeof(PBaseType))) PBaseType("int64", Type::getInt64Ty(getGlobalContext()), 64, true, false, true);
+	auto type_uint8 = new ((PBaseType *)transient_memory.reserve(sizeof(PBaseType))) PBaseType("uint8", Type::getInt8Ty(getGlobalContext()), 8, true, false, false);
+	auto type_uint16 = new ((PBaseType *)transient_memory.reserve(sizeof(PBaseType))) PBaseType("uint16", Type::getInt16Ty(getGlobalContext()), 16, true, false, false);
+	auto type_uint32 = new ((PBaseType *)transient_memory.reserve(sizeof(PBaseType))) PBaseType("uint32", Type::getInt32Ty(getGlobalContext()), 32, true, false, false);
+	auto type_uint64 = new ((PBaseType *)transient_memory.reserve(sizeof(PBaseType))) PBaseType("uint64", Type::getInt64Ty(getGlobalContext()), 64, true, false, false);
+	auto type_float32 = new ((PBaseType *)transient_memory.reserve(sizeof(PBaseType))) PBaseType("float32", Type::getFloatTy(getGlobalContext()), 32, true, true, true);
+	auto type_float64 = new ((PBaseType *)transient_memory.reserve(sizeof(PBaseType))) PBaseType("float64", Type::getDoubleTy(getGlobalContext()), 64, true, true, true);
+	type_table.set(type_void->name, type_void);
+	type_table.set(type_bool->name, type_bool);
+	type_table.set(type_int8->name, type_int8);
+	type_table.set(type_int16->name, type_int16);
+	type_table.set(type_int32->name, type_int32);
+	type_table.set(type_int64->name, type_int64);
+	type_table.set(type_uint8->name, type_uint8);
+	type_table.set(type_uint16->name, type_uint16);
+	type_table.set(type_uint32->name, type_uint32);
+	type_table.set(type_uint64->name, type_uint64);
+	type_table.set(type_float32->name, type_float32);
+	type_table.set(type_float64->name, type_float64);
+	
 
 	// NOTE: A lot of the code relies on a lot of pointers just about everywhere.
 	// Perhaps too much? I feel like maybe more value semantics would result in
