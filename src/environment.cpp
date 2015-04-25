@@ -1,7 +1,7 @@
 #include "environment.h"
 #include "helpers.h"
 
-PVariable *search_for_symbol(Environment env, char *name) {
+PVariable *search_for_symbol(Environment env, const char *name) {
 	Environment *current = &env;
 	HashNode<PVariable> *result;
 	do {
@@ -12,7 +12,7 @@ PVariable *search_for_symbol(Environment env, char *name) {
 	return NULL;
 }
 
-PBaseType *search_for_type(Environment env, char *name) {
+PBaseType *search_for_type(Environment env, const char *name) {
 	Environment *current = &env;
 	HashNode<PBaseType *> *result;
 	do {
@@ -23,7 +23,7 @@ PBaseType *search_for_type(Environment env, char *name) {
 	return NULL;
 }
 
-PFunction *search_for_function(Environment env, char *name) {
+PFunction *search_for_function(Environment env, const char *name) {
 	Environment *current = &env;
 	HashNode<PFunction> *result;
 	do {

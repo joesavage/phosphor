@@ -312,6 +312,8 @@ ASTNode *Parser::parse_variable_declaration() {
 
 	if (!scan_token(TOKEN_KEYWORD, "let"))
 		result->toVariableDeclaration()->type = parse_type()->toType()->value;
+	else
+		result->toVariableDeclaration()->type = NULL;
 
 	if (peek_token_type(TOKEN_KEYWORD)) {
 		set_error("cannot declare variable with reserved keyword name");
@@ -392,7 +394,7 @@ ASTNode *Parser::parse_function() {
 
 	if (!scan_token(TOKEN_OPERATOR, "->")
 	 || !(signature->toFunctionSignature()->type
-	      = parse_type()->toType()->value).is_set())
+	      = parse_type()->toType()->value).base_type)
 	{
 		set_error("expected type in function signature");
 		return NULL;

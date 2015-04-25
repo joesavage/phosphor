@@ -26,9 +26,9 @@ private:
 	PVariable generate_lvalue(ASTNode *node);
 	PValue generate_rvalue(ASTNode *node);
 	PFunction generate_function(ASTNode *node);
-	PBaseType *lookup_base_type(char *name);
-	PFunction lookup_function(char *name);
-	PVariable lookup_symbol(char *name);
+	PBaseType *lookup_base_type(const char *name);
+	PFunction *lookup_function(const char *name);
+	PVariable *lookup_symbol(const char *name);
 	PValue get_boolean_value(bool value);
 	bool implicit_type_convert(PValue *source, PType dest_extype);
 	bool explicit_type_convert(PValue *source, PType dest_extype);

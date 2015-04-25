@@ -36,19 +36,16 @@ void CodeGenerator::set_error(ASTNode *node, const char *format, ...) {
 	errnode = node;
 }
 
-PBaseType *CodeGenerator::lookup_base_type(char *name) {
+PBaseType *CodeGenerator::lookup_base_type(const char *name) {
 	return search_for_type(*env, name);
 }
 
-// TODO: I think maybe the following two should use pointer semantics.
-PFunction CodeGenerator::lookup_function(char *name) {
-	PFunction *function = search_for_function(*env, name);
-	return function ? *function : PFunction();
+PFunction *CodeGenerator::lookup_function(const char *name) {
+	return search_for_function(*env, name);
 }
 
-PVariable CodeGenerator::lookup_symbol(char *name) {
-	PVariable *symbol = search_for_symbol(*env, name);
-	return symbol ? *symbol : PVariable();
+PVariable *CodeGenerator::lookup_symbol(const char *name) {
+	return search_for_symbol(*env, name);
 }
 
 PValue CodeGenerator::get_boolean_value(bool value) {
@@ -61,13 +58,13 @@ PValue CodeGenerator::get_boolean_value(bool value) {
 }
 
 AllocaInst *CodeGenerator::create_entry_block_alloca(char *name, Type *type) {
-	PFunction function = lookup_function(env->current_function);
-	if (!function.return_type.is_set() || !function.llvmval) {
+	PFunction *function = lookup_function(env->current_function);
+	if (!function) {
 		fatal_error("invalid 'current' function for alloca creation\n");
 		return NULL;
 	}
 
-	BasicBlock *entry_bb = &function.llvmval->getEntryBlock();
+	BasicBlock *entry_bb = &function->llvmval->getEntryBlock();
 	IRBuilder<> entry_builder(entry_bb, entry_bb->begin());
 	return entry_builder.CreateAlloca(type, 0, name);
 }
@@ -169,9 +166,9 @@ PVariable CodeGenerator::generate_lvalue(ASTNode *node) {
 			auto pnode = *node->toVariableDeclaration();
 			char *variable_name = pnode.name->toString()->value;
 			PType variable_type;
-			if (pnode.type.is_set())
+			if (pnode.type.base_type)
 				variable_type = pnode.type;
-			assert(variable_type.is_set() || pnode.init);
+			assert(variable_type.base_type || pnode.init);
 			if (env->symbol_table.exists(variable_name)) {
 				set_error(pnode.name, "variable naming conflict");
 				break;
@@ -182,7 +179,7 @@ PVariable CodeGenerator::generate_lvalue(ASTNode *node) {
 				value = generate_rvalue(pnode.init);
 				if (error) {
 					break;
-				} else if (variable_type.is_set()) {
+				} else if (variable_type.base_type) {
 					if (!implicit_type_convert(&value, variable_type)) {
 						set_error(pnode.init, "type mismatch in variable initialization - "
 						          "expected '%s', got '%s'", variable_type.to_string(),
@@ -196,7 +193,7 @@ PVariable CodeGenerator::generate_lvalue(ASTNode *node) {
 					result.type = value.type;
 				}
 			}
-			if (variable_type.is_set())
+			if (variable_type.base_type)
 				result.type = variable_type;
 
 			// alloca at the entry block so that the mem2reg pass can hit
@@ -212,14 +209,14 @@ PVariable CodeGenerator::generate_lvalue(ASTNode *node) {
 		case NODE_IDENTIFIER:
 		{
 			auto pnode = *node->toString();
-			PVariable value = lookup_symbol(pnode.value);
-			if (!value.type.is_set()) {
+			PVariable *value = lookup_symbol(pnode.value);
+			if (!value) {
 				set_error(node, "failed to find symbol '%s'", pnode.value);
 				break;
 			}
 
-			result.type = value.type;
-			result.llvmval = value.llvmval;
+			result.type = value->type;
+			result.llvmval = value->llvmval;
 			break;
 		}
 		case NODE_UNARY_OPERATOR:
@@ -425,15 +422,15 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 				}
 
 				auto symbol_name = *pnode.operand->toString();
-				PVariable variable = lookup_symbol(symbol_name.value);
-				if (!variable.type.is_set()) {
+				PVariable *variable = lookup_symbol(symbol_name.value);
+				if (!variable) {
 					set_error(pnode.operand, "invalid symbol name for '&' operator");
 					break;
 				}
 
-				result.type = variable.type;
+				result.type = variable->type;
 				result.type.pointer_level += 1;
-				result.llvmval = variable.llvmval;
+				result.llvmval = variable->llvmval;
 				break;
 			} else if (!strcmp(pnode.value, "*")) {
 				PVariable value = generate_lvalue(node);
@@ -478,18 +475,18 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 			auto pnode = *node->toFunctionCall();
 			char *function_name = pnode.name->toString()->value;
 			Function *function = module->getFunction(function_name);
-			PFunction pfunction = lookup_function(function_name);
-			if (!function || !pfunction.return_type.is_set()) {
+			PFunction *pfunction = lookup_function(function_name);
+			if (!function || !pfunction) {
 				set_error(pnode.name, "unknown function referenced '%s'",
 				          function_name);
 				break;
 			}
 
 			size_t args_count = pnode.args.size();
-			if (args_count != pfunction.arg_types.size()) {
+			if (args_count != pfunction->arg_types.size()) {
 				set_error(node,
 				          "function parameter number mismatch - expected %d, got %d",
-				          pfunction.arg_types.size(), args_count);
+				          pfunction->arg_types.size(), args_count);
 				break;
 			}
 
@@ -498,21 +495,21 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 				PValue arg = generate_rvalue(pnode.args[i]);
 				if (error)
 					break;
-				if (!implicit_type_convert(&arg, pfunction.arg_types[i])) {
+				if (!implicit_type_convert(&arg, pfunction->arg_types[i])) {
 					set_error(node, "function parameter mismatch at param %d - "
 					          "expected '%s', got '%s'",
-					          i + 1, pfunction.arg_types[i].to_string(),
+					          i + 1, pfunction->arg_types[i].to_string(),
 					          arg.type.to_string());
 					break;
 				}
 
-				assert(arg.type == pfunction.arg_types[i]);
+				assert(arg.type == pfunction->arg_types[i]);
 				args.add(arg.llvmval);
 			}
 			if (error)
 				break;
 
-			result.type = pfunction.return_type;
+			result.type = pfunction->return_type;
 			result.llvmval = builder->CreateCall(function,
 			                                     ArrayRef<Value *>(args.getPointer(0),
 			                                                       args_count),
@@ -639,27 +636,27 @@ PFunction CodeGenerator::generate_function(ASTNode *node) {
 					break;
 				}
 
-				PFunction pfunction = lookup_function(function_name);
-				if (!pfunction.return_type.is_set()) {
+				PFunction *pfunction = lookup_function(function_name);
+				if (!pfunction) {
 					set_error(pnode.name,
 					          "conflict between LLVM and function table state");
 					break;
 				}
 
-				if (pfunction.return_type != type) {
+				if (pfunction->return_type != type) {
 					set_error(node,
 					          "redefinition of function with differing return type");
 					break;
 				}
 
-				if (pfunction.arg_types.size() != result.arg_types.size()) {
+				if (pfunction->arg_types.size() != result.arg_types.size()) {
 					set_error(node, "redefinition of function with parameter number "
 					          "mismatch - expected %d, got %d",
-					          pfunction.arg_types.size(), args_count);
+					          pfunction->arg_types.size(), args_count);
 					break;
 				}
-				for (size_t i = 0; i < pfunction.arg_types.size(); ++i) {
-					PType expected_type = pfunction.arg_types[i];
+				for (size_t i = 0; i < pfunction->arg_types.size(); ++i) {
+					PType expected_type = pfunction->arg_types[i];
 					PType actual_type = result.arg_types[i];
 					if (actual_type != expected_type) {
 						set_error(node, "redefinition of function with parameter mis-match "
@@ -670,7 +667,7 @@ PFunction CodeGenerator::generate_function(ASTNode *node) {
 				if (error)
 					break;
 
-				result = pfunction;
+				result = *pfunction;
 			} else {
 				result.llvmval = function;
 				result.return_type = pnode.type;
@@ -708,8 +705,8 @@ PFunction CodeGenerator::generate_function(ASTNode *node) {
 					auto arg = *args[i]->toVariableDeclaration();
 					char *param_name = arg.name->toString()->value;
 					it->setName(param_name);
-					PVariable param = lookup_symbol(param_name);
-					builder->CreateStore(it, param.llvmval);
+					PVariable *param = lookup_symbol(param_name);
+					builder->CreateStore(it, param->llvmval);
 				}
 			}
 
@@ -862,11 +859,11 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 				val.llvmval = NULL;
 			}
 
-			PFunction function = lookup_function(env->current_function);
-			if (!implicit_type_convert(&val, function.return_type)) {
+			PFunction *function = lookup_function(env->current_function);
+			if (!implicit_type_convert(&val, function->return_type)) {
 				set_error(pnode.operand,
 				          "type mismatch in return statement - expected '%s', got '%s'",
-				          function.return_type.to_string(), val.type.to_string());
+				          function->return_type.to_string(), val.type.to_string());
 				break;
 			}
 

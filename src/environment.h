@@ -64,10 +64,6 @@ struct PType {
 		return result;
 	}
 
-	inline bool is_set() {
-		return base_type;
-	}
-
 	char *to_string() {
 		if (!base_type || !base_type->name)
 			return "(unknown)";
@@ -153,8 +149,8 @@ struct Environment {
 	Environment() { parent = NULL; current_function = NULL; }
 };
 
-PVariable *search_for_symbol(Environment env, char *name);
-PBaseType *search_for_type(Environment env, char *name);
-PFunction *search_for_function(Environment env, char *name);
+PVariable *search_for_symbol(Environment env, const char *name);
+PBaseType *search_for_type(Environment env, const char *name);
+PFunction *search_for_function(Environment env, const char *name);
 
 #endif
