@@ -89,7 +89,7 @@ bool HashMap<T>::set(const char *key, T value) {
 	}
 
 	// If the map is over half full, bump up the size.
-	if (count * 2 > size)
+	if (count * 1.25f > size)
 		resize(size * 2);
 
 	memcpy(node.key, key, strlen(key) + 1);

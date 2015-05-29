@@ -32,9 +32,10 @@ static char *read_file(char *path) {
 }
 
 static void write_module_to_file(Module *module, const char *path) {
-	// TODO: File complications & errors, etc.
 	FILE *file = fopen(path, "wb+");
 	int fno = fileno(file);
+	if (fno == -1 || !file)
+		fatal_error("failed to write file '%s'\n", path);
 	llvm::raw_fd_ostream ostream(fno, false);
 	llvm::raw_ostream *ostreamptr = (llvm::raw_ostream *)&ostream;
 	WriteBitcodeToFile(module, *ostreamptr);

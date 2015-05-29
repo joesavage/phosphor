@@ -889,8 +889,8 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 
 Module *CodeGenerator::generate() {
 	InitializeNativeTarget();
-  InitializeNativeTargetAsmPrinter();
-  InitializeNativeTargetAsmParser();
+	InitializeNativeTargetAsmPrinter();
+	InitializeNativeTargetAsmParser();
 	IRBuilder<> builder = IRBuilder<>(getGlobalContext());
 	this->builder = &builder;
 	module = new Module("program", getGlobalContext());
