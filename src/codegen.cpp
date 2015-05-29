@@ -52,7 +52,7 @@ PValue CodeGenerator::get_boolean_value(bool value) {
 	PValue result;
 	result.type = PType(lookup_base_type("bool"));
 	result.llvmval = ConstantInt::get(getGlobalContext(),
-	                                  APInt(result.type.base_type->numbits,
+	                                  APInt(result.type.getBaseType()->numbits,
 	                                  value));
 	return result;
 }
@@ -75,14 +75,15 @@ bool CodeGenerator::implicit_type_convert(PValue *source,
 	if (source->type == dest_type)
 		return true;
 
-	PBaseType *source_base = source->type.base_type;
-	PBaseType *dest_base = dest_type.base_type;
+	PBaseType *source_base = source->type.getBaseType();
+	PBaseType *dest_base = dest_type.getBaseType();
 	Type *source_llvm = source->type.getLLVMType();
 	Type *dest_llvm = dest_type.getLLVMType();
 
 	// Pointers can only cast to themselves at the moment, so this check works
 	// fine. Will likely need to change this as other modifiers get introduced.
-	if (source->type.pointer_level != dest_type.pointer_level)
+	// TODO: Also, array stuff needs dealing with here.
+	if (source->type.is_pointer != dest_type.is_pointer)
 		return false;
 
 	if (source_base->is_numeric && dest_base->is_numeric) {
@@ -128,8 +129,8 @@ bool CodeGenerator::explicit_type_convert(PValue *source,
 	if (source->type == dest_type)
 		return true;
 
-	PBaseType *source_base = source->type.base_type;
-	PBaseType *dest_base = dest_type.base_type;
+	PBaseType *source_base = source->type.getBaseType();
+	PBaseType *dest_base = dest_type.getBaseType();
 	Type *source_llvm = source->type.getLLVMType();
 	Type *dest_llvm = dest_type.getLLVMType();
 
@@ -228,12 +229,11 @@ PVariable CodeGenerator::generate_lvalue(ASTNode *node) {
 				if (error)
 					break;
 
-				if (!value.type.pointer_level) {
+				if (!value.type.is_pointer) {
 					set_error(pnode.operand, "cannot dereference non-pointer operand");
 					break;
 				}
-				result.type = value.type;
-				result.type.pointer_level -= 1;
+				result.type = *value.type.indirect_type;
 				result.llvmval = (AllocaInst *)value.llvmval;
 				break;
 			}
@@ -290,13 +290,13 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 			if (error)
 				break;
 
-			PBaseType *left_base_type = left.type.base_type;
-			PBaseType *right_base_type = right.type.base_type;
+			PBaseType *left_base_type = left.type.getBaseType();
+			PBaseType *right_base_type = right.type.getBaseType();
 
 			// TODO: Handle pointer (+ other modifiers?) in operations!
 			// TODO: Pointer subtraction at some point. Plus, clean up all this type
 			// code - particularly with regards to pointers, modifiers, etc.
-			if (left.type.pointer_level) {
+			if (left.type.is_pointer) {
 				if (strcmp(pnode.value, "+")) {
 					set_error(node, "pointer types are not yet supported in non-plus "
 					          "binary expressions.");
@@ -322,8 +322,8 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 			}
 
 			PType type = left.type;
-			PBaseType *base_type = type.base_type;
-			if (!base_type->is_numeric && !type.pointer_level) {
+			PBaseType *base_type = type.getBaseType();
+			if (!base_type->is_numeric && !type.is_pointer) {
 				set_error(pnode.right,
 				          "non-numeric type '%s' specified for binary operation",
 				          left.type.to_string());
@@ -373,7 +373,7 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 					result.llvmval = builder->CreateICmpUGT(left.llvmval,
 					                                       right.llvmval, "gttmp");
 			} else if (!strcmp(pnode.value, "+")) {
-				if (type.pointer_level)
+				if (type.is_pointer)
 					result.llvmval = builder->CreateGEP(left.llvmval, right.llvmval);
 				else if (base_type->is_float)
 					result.llvmval = builder->CreateFAdd(left.llvmval,
@@ -428,8 +428,8 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 					break;
 				}
 
-				result.type = variable->type;
-				result.type.pointer_level += 1;
+				result.type.indirect_type = &variable->type; // TODO: Check this address-of is safe.
+				result.type.is_pointer = true;
 				result.llvmval = variable->llvmval;
 				break;
 			} else if (!strcmp(pnode.value, "*")) {
@@ -441,7 +441,7 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 				break;
 			} else if (!strcmp(pnode.value, "+")) {
 				PValue value = generate_rvalue(pnode.operand);
-				PBaseType *base_type = value.type.base_type;
+				PBaseType *base_type = value.type.getBaseType();
 				if (!base_type->is_numeric) {
 					set_error(node, "'+' may only be used on numeric types");
 					break;
@@ -548,7 +548,7 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 				set_error(node, "integer literal too large");
 				break;
 			}
-			numbits = result.type.base_type->numbits;
+			numbits = result.type.getBaseType()->numbits;
 
 			result.llvmval = ConstantInt::get(getGlobalContext(),
 			                                  APInt(numbits, value, false));
@@ -576,22 +576,16 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 		case NODE_CONSTANT_STRING:
 		{
 			auto pnode = *node->toString();
-			pnode.value++; // Strings as stored internally with '"'s. TODO: Fix?
+			pnode.value++; // Strings as stored internally with '"'s
 			size_t string_length = strlen(pnode.value) - 1;
-			result.type = PType(lookup_base_type("uint8"), 0, string_length);
 
-			// TODO: Store constant strings somewhere other than the stack.
-			// (e.g. __cstring)
-			MemoryList<Constant *> string_bytes(string_length);
-			for (size_t i = 0; i < string_length; ++i) {
-				auto ap_int = APInt(8, pnode.value[i], false);
-				string_bytes.add(ConstantInt::get(getGlobalContext(), ap_int));
-			}
-
-			result.llvmval = ConstantArray::get(ArrayType::get(lookup_base_type("uint8")->llvmty, string_length),
-			                                    ArrayRef<Constant *>(string_bytes.getPointer(0),
-			                                                         string_length));
-
+			PType *byte_type = (PType *)memory->reserve(sizeof(PType));
+			*byte_type = PType(lookup_base_type("uint8"));
+			PType *array_type = (PType *)memory->reserve(sizeof(PType));
+			*array_type = PType(NULL, false, string_length + 1, byte_type);
+			result.type = PType(NULL, true, 0, array_type);
+			result.llvmval = builder->CreateGlobalString(StringRef(pnode.value,
+			                                                       string_length));
 			break;
 		}
 		case NODE_IDENTIFIER:
@@ -928,14 +922,14 @@ Module *CodeGenerator::generate() {
 	// Additionally, the order of these needs to be properly thought about!
 	// TODO: Perform optimisations based on passed optimisation flags.
 	FunctionPassManager fpm(module);
-	// fpm.add(createBasicAliasAnalysisPass());
-	// fpm.add(createPromoteMemoryToRegisterPass());
-	// fpm.add(createReassociatePass());
-	// fpm.add(createConstantPropagationPass());
-	// fpm.add(createDeadCodeEliminationPass());
-	// fpm.add(createGVNPass());
-	// fpm.add(createCFGSimplificationPass());
-	// fpm.add(createInstructionCombiningPass());
+	fpm.add(createBasicAliasAnalysisPass());
+	fpm.add(createPromoteMemoryToRegisterPass());
+	fpm.add(createReassociatePass());
+	fpm.add(createConstantPropagationPass());
+	fpm.add(createDeadCodeEliminationPass());
+	fpm.add(createGVNPass());
+	fpm.add(createCFGSimplificationPass());
+	fpm.add(createInstructionCombiningPass());
 	fpm.doInitialization();
 	this->fpm = &fpm;
 

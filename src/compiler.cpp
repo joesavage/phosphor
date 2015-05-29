@@ -306,6 +306,7 @@ int main() {
 	 // Code Generation
 	printf("\nLLVM IR: \n");
 	generator.env = parser.env;
+	generator.memory = parser.memory;
 	Module *module = generator.generate();
 	if (generator.error) {
 		if (generator.errnode)

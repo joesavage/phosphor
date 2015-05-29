@@ -44,35 +44,43 @@ struct PBaseType {
 };
 
 struct PType {
-	PBaseType *base_type;
-	unsigned int pointer_level;
-	unsigned int array_size; // TODO: This needs re-thinking (multi-dimensional arrays, etc.)
+	PBaseType *base_type; // TODO: We'll never use both of these at the same time
+	PType *indirect_type;
+
+	bool is_pointer; // TODO: We'll never use both of these at the same time
+	unsigned int array_size;
 	// TODO: Other modifiers (possibly bitflag all modifiers in future)
 
-	PType(PBaseType *base_type = NULL, int pointer_level = 0,
-	      int array_size = 0) {
+	PType(PBaseType *base_type = NULL, bool is_pointer = 0,
+	      unsigned int array_size = 0, PType *indirect_type = NULL) {
 		this->base_type = base_type;
-		this->pointer_level = pointer_level;
+		this->is_pointer = is_pointer;
 		this->array_size = array_size;
+		this->indirect_type = indirect_type;
 	}
 
 	Type *getLLVMType() {
-		Type *result = base_type->llvmty;
+		Type *result = NULL;
 
-		// TODO: Think about the order in which these apply! Right now, we can only
-		// have arrays of pointers, and not pointers of arrays.
-		//
-		// I suspect this will require some serious rethinking of how this works?
-		// THOUGHT: A 'PType' chain could solve this in a flexible and elegant way.
-
-		for (unsigned int i = 0; i < pointer_level; ++i)
-			result = PointerType::get(result, 0);
-		if (array_size > 0)
-			result = ArrayType::get(result, array_size);
+		if (is_pointer) {
+			assert(indirect_type);
+			result = PointerType::get(indirect_type->getLLVMType(), 0);
+		} else if (array_size > 0) {
+			assert(indirect_type);
+			result = ArrayType::get(indirect_type->getLLVMType(), array_size);
+		} else {
+			result = base_type->llvmty;
+		}
 
 		// Other modifiers can go here
 
 		return result;
+	}
+
+	PBaseType *getBaseType() {
+		if (is_pointer || array_size > 0)
+			return indirect_type->getBaseType();
+		return base_type;
 	}
 
 	char *to_string() {
@@ -81,16 +89,20 @@ struct PType {
 
 		const char *type_name = base_type->name;
 		size_t buf_len = 255;
-		char *result = (char *)heap_alloc(buf_len);
-		strncpy(result, type_name, buf_len);
-		for (unsigned int i = 0; i < pointer_level; ++i)
-			strncpy(result + strlen(type_name) + i,
-			        "^",
-			        buf_len - strlen(type_name) - i);
+		char *result = (char *)heap_alloc(buf_len + 1);
+		result[buf_len - 1] = '\0';
 
+		if (is_pointer || array_size > 0) {
+			char *indirect_ty = indirect_type->to_string();
+			strncpy(result, indirect_ty, buf_len);
 
-		if (array_size > 0)
-			strncpy(result + strlen(type_name), "[]", buf_len - strlen(type_name));
+			if (is_pointer)
+				strncpy(result + strlen(indirect_ty), "^", buf_len - strlen(indirect_ty));
+			else if (array_size > 0)
+				strncpy(result + strlen(indirect_ty), "[]", buf_len - strlen(indirect_ty));
+		} else {
+			strncpy(result, type_name, buf_len);
+		}
 
 		// Can handle other modifiers here
 
@@ -99,8 +111,9 @@ struct PType {
 
 	bool operator==(const PType &ty) {
 		return ty.base_type == base_type
-		    && ty.pointer_level == pointer_level
-		    && ty.array_size == array_size;
+		    && ty.is_pointer == is_pointer
+		    && ty.array_size == array_size
+		    && ty.indirect_type == indirect_type;
 	}
 	bool operator!=(const PType &ty) { return !(*this == ty); }
 };

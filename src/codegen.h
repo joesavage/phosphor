@@ -8,6 +8,7 @@
 
 #include "ast.h"
 #include "environment.h"
+#include "memoryarena.h"
 
 using namespace llvm;
 
@@ -15,6 +16,7 @@ struct CodeGenerator {
 	ASTNode *root;
 	char *error;
 	ASTNode *errnode;
+	MemoryArena *memory;
 	Environment *env;
 	Module *module;
 	IRBuilder<> *builder;

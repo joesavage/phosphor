@@ -125,7 +125,11 @@ ASTNode *Parser::parse_type() {
 		char *value = scan_token_type(TOKEN_OPERATOR)->value;
 		for (size_t i = 0; i < strlen(value); ++i) {
 			if (value[i] == '^') {
-				result->toType()->value.pointer_level += 1;
+				// We could probably do some more efficient memory allocation here.
+				PType *old_ty = (PType *)memory->reserve(sizeof(PType));
+				*old_ty = result->toType()->value;
+				result->toType()->value.indirect_type = old_ty;
+				result->toType()->value.is_pointer = true;
 			} else {
 				set_error("unexpected operator in variable declaration");
 				return NULL;
