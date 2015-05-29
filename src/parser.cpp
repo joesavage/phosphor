@@ -78,6 +78,10 @@ ASTNode *Parser::parse_constant() {
 	} else if ((token = scan_token_type(TOKEN_STRING))) {
 		result = create_node(NODE_CONSTANT_STRING);
 		result->toString()->value = token->value;
+		if (strlen(token->value) <= 2) {
+			set_error("empty strings are not allowed");
+			return NULL;
+		}
 	} else if (peek_token(TOKEN_KEYWORD, "true")) {
 		++cursor;
 		result = create_node(NODE_CONSTANT_BOOL);

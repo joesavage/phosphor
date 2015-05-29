@@ -46,18 +46,29 @@ struct PBaseType {
 struct PType {
 	PBaseType *base_type;
 	unsigned int pointer_level;
+	unsigned int array_size; // TODO: This needs re-thinking (multi-dimensional arrays, etc.)
 	// TODO: Other modifiers (possibly bitflag all modifiers in future)
 
-	PType(PBaseType *base_type = NULL, int pointer_level = 0) {
+	PType(PBaseType *base_type = NULL, int pointer_level = 0,
+	      int array_size = 0) {
 		this->base_type = base_type;
 		this->pointer_level = pointer_level;
+		this->array_size = array_size;
 	}
 
 	Type *getLLVMType() {
 		Type *result = base_type->llvmty;
 
+		// TODO: Think about the order in which these apply! Right now, we can only
+		// have arrays of pointers, and not pointers of arrays.
+		//
+		// I suspect this will require some serious rethinking of how this works?
+		// THOUGHT: A 'PType' chain could solve this in a flexible and elegant way.
+
 		for (unsigned int i = 0; i < pointer_level; ++i)
 			result = PointerType::get(result, 0);
+		if (array_size > 0)
+			result = ArrayType::get(result, array_size);
 
 		// Other modifiers can go here
 
@@ -77,6 +88,10 @@ struct PType {
 			        "^",
 			        buf_len - strlen(type_name) - i);
 
+
+		if (array_size > 0)
+			strncpy(result + strlen(type_name), "[]", buf_len - strlen(type_name));
+
 		// Can handle other modifiers here
 
 		return result;
@@ -84,7 +99,8 @@ struct PType {
 
 	bool operator==(const PType &ty) {
 		return ty.base_type == base_type
-		    && ty.pointer_level == pointer_level;
+		    && ty.pointer_level == pointer_level
+		    && ty.array_size == array_size;
 	}
 	bool operator!=(const PType &ty) { return !(*this == ty); }
 };

@@ -573,6 +573,27 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 			result.llvmval = ConstantFP::get(getGlobalContext(), number);
 			break;
 		}
+		case NODE_CONSTANT_STRING:
+		{
+			auto pnode = *node->toString();
+			pnode.value++; // Strings as stored internally with '"'s. TODO: Fix?
+			size_t string_length = strlen(pnode.value) - 1;
+			result.type = PType(lookup_base_type("uint8"), 0, string_length);
+
+			// TODO: Store constant strings somewhere other than the stack.
+			// (e.g. __cstring)
+			MemoryList<Constant *> string_bytes(string_length);
+			for (size_t i = 0; i < string_length; ++i) {
+				auto ap_int = APInt(8, pnode.value[i], false);
+				string_bytes.add(ConstantInt::get(getGlobalContext(), ap_int));
+			}
+
+			result.llvmval = ConstantArray::get(ArrayType::get(lookup_base_type("uint8")->llvmty, string_length),
+			                                    ArrayRef<Constant *>(string_bytes.getPointer(0),
+			                                                         string_length));
+
+			break;
+		}
 		case NODE_IDENTIFIER:
 		{
 			auto pnode = *node->toString();
@@ -907,14 +928,14 @@ Module *CodeGenerator::generate() {
 	// Additionally, the order of these needs to be properly thought about!
 	// TODO: Perform optimisations based on passed optimisation flags.
 	FunctionPassManager fpm(module);
-	fpm.add(createBasicAliasAnalysisPass());
-	fpm.add(createPromoteMemoryToRegisterPass());
-	fpm.add(createReassociatePass());
-	fpm.add(createConstantPropagationPass());
-	fpm.add(createDeadCodeEliminationPass());
-	fpm.add(createGVNPass());
-	fpm.add(createCFGSimplificationPass());
-	fpm.add(createInstructionCombiningPass());
+	// fpm.add(createBasicAliasAnalysisPass());
+	// fpm.add(createPromoteMemoryToRegisterPass());
+	// fpm.add(createReassociatePass());
+	// fpm.add(createConstantPropagationPass());
+	// fpm.add(createDeadCodeEliminationPass());
+	// fpm.add(createGVNPass());
+	// fpm.add(createCFGSimplificationPass());
+	// fpm.add(createInstructionCombiningPass());
 	fpm.doInitialization();
 	this->fpm = &fpm;
 
