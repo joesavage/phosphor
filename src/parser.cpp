@@ -272,8 +272,21 @@ ASTNode *Parser::parse_expression(bool silent_mode,
 	if (!result || error)
 		return NULL;
 
-	// TODO: Ternary operators and square bracket operators need to be handled
-	// especially here!
+	// TODO: Ternary operators need to be handled as a special case here!
+
+	// Parse array accesses
+	ASTNode *array_index = NULL;
+	if (scan_token(TOKEN_RESERVED_PUNCTUATION, "[")
+	    && (array_index = parse_atom())
+	    && scan_token(TOKEN_RESERVED_PUNCTUATION, "]"))
+	{
+		ASTNode *array_access = create_node(NODE_BINARY_OPERATOR);
+		array_access->toBinaryOperator()->value = "[]";
+		array_access->toBinaryOperator()->left = result;
+		array_access->toBinaryOperator()->right = array_index;
+		result = array_access;
+	}
+		
 
 	POperator operator_properties;
 	while (peek_binary_operator())
@@ -485,6 +498,8 @@ ASTNode *Parser::parse_return() {
 
 	ASTNode *result = create_node(NODE_RETURN);
 	result->toUnaryOperator()->operand = parse_expression(true);
+	if (!result->toUnaryOperator()->operand)
+		set_error("expected expression following 'return' keyword\n");
 
 	return result;
 }

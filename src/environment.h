@@ -84,10 +84,9 @@ struct PType {
 	}
 
 	char *to_string() {
-		if (!base_type || !base_type->name)
+		if ((!base_type || !base_type->name) && !indirect_type)
 			return "(unknown)";
 
-		const char *type_name = base_type->name;
 		size_t buf_len = 255;
 		char *result = (char *)heap_alloc(buf_len + 1);
 		result[buf_len - 1] = '\0';
@@ -98,10 +97,10 @@ struct PType {
 
 			if (is_pointer)
 				strncpy(result + strlen(indirect_ty), "^", buf_len - strlen(indirect_ty));
-			else if (array_size > 0)
+			else if (array_size > 0) // TODO: Include array size in output
 				strncpy(result + strlen(indirect_ty), "[]", buf_len - strlen(indirect_ty));
 		} else {
-			strncpy(result, type_name, buf_len);
+			strncpy(result, base_type->name, buf_len);
 		}
 
 		// Can handle other modifiers here

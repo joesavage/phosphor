@@ -80,9 +80,10 @@ bool CodeGenerator::implicit_type_convert(PValue *source,
 	Type *source_llvm = source->type.getLLVMType();
 	Type *dest_llvm = dest_type.getLLVMType();
 
-	// Pointers can only cast to themselves at the moment, so this check works
-	// fine. Will likely need to change this as other modifiers get introduced.
-	// TODO: Also, array stuff needs dealing with here.
+	// TODO: This condition is not sufficient, doesn't deal with indirect types,
+	// and additionally doesn't deal with arrays.
+	// This can lead to weird behaviour such as 'puts("Hello!")' working, even
+	// if strings are defined to be int[]^ while puts is defined to take int^.
 	if (source->type.is_pointer != dest_type.is_pointer)
 		return false;
 
@@ -282,6 +283,43 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 				break;
 			}
 
+			// TODO: Both '[]' and '+'(ptr) should use C-style type-based arithmetic
+			// rather than byte-based traversal.
+
+			// Handle '[]' for array indexing.
+			// TODO: This should happen for both arr & ptr types.
+			//		TODO: But what about string array accesses? They're pointers to
+			//		arrays rather than pure arrays, which is problematic.
+			//		(Solutions: either don't globalise strings [avoid the ptr part],
+			//		 or store strings as ptrs rather than ptrs to arrs [avoid arr],
+			//		 or strings have operator overloading for '[]' which derefs).
+			// TODO: Pointer array indexes are near identical to pointer arith, so the
+			// code for both should probably be combined.
+			// TODO: Strings should be indexed as UTF-8 some day (instead of per-byte)
+			// Since this requires operator overloading anyway, maybe the solution to
+			// the ptr to arr problem should be in overloading.
+			if (!strcmp(pnode.value, "[]")) {
+				PVariable left = generate_lvalue(pnode.left);
+				if (error)
+					break;
+
+				PValue right = generate_rvalue(pnode.right);
+				if (error)
+					break;
+
+				// TODO: The errors for this will probably be terrible right now.
+
+				if (left.type.array_size) {
+					std::vector<Value *> indices;
+					indices.push_back(builder->getInt32(0));
+					indices.push_back(right.llvmval);
+					result.type = *left.type.indirect_type;
+					result.llvmval = builder->CreateGEP(left.llvmval, indices);
+					result.llvmval = builder->CreateLoad(result.llvmval);
+					break;
+				}
+			}
+
 
 			PValue left = generate_rvalue(pnode.left);
 			if (error)
@@ -292,6 +330,7 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 
 			PBaseType *left_base_type = left.type.getBaseType();
 			PBaseType *right_base_type = right.type.getBaseType();
+
 
 			// TODO: Handle pointer (+ other modifiers?) in operations!
 			// TODO: Pointer subtraction at some point. Plus, clean up all this type
@@ -421,16 +460,14 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 					break;
 				}
 
-				auto symbol_name = *pnode.operand->toString();
-				PVariable *variable = lookup_symbol(symbol_name.value);
-				if (!variable) {
-					set_error(pnode.operand, "invalid symbol name for '&' operator");
+				PVariable variable = generate_lvalue(pnode.operand);
+				if (error)
 					break;
-				}
 
-				result.type.indirect_type = &variable->type; // TODO: Check this address-of is safe.
+				result.type.indirect_type = (PType *)memory->reserve(sizeof(PType));
+				*result.type.indirect_type = variable.type;
 				result.type.is_pointer = true;
-				result.llvmval = variable->llvmval;
+				result.llvmval = variable.llvmval;
 				break;
 			} else if (!strcmp(pnode.value, "*")) {
 				PVariable value = generate_lvalue(node);
