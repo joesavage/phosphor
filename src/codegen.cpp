@@ -80,11 +80,9 @@ bool CodeGenerator::implicit_type_convert(PValue *source,
 	Type *source_llvm = source->type.getLLVMType();
 	Type *dest_llvm = dest_type.getLLVMType();
 
-	// TODO: This condition is not sufficient, doesn't deal with indirect types,
-	// and additionally doesn't deal with arrays.
-	// This can lead to weird behaviour such as 'puts("Hello!")' working, even
-	// if strings are defined to be int[]^ while puts is defined to take int^.
-	if (source->type.is_pointer != dest_type.is_pointer)
+	// For now, pointers and arrays don't do any implicit type conversion.
+	if (source->type.is_pointer || dest_type.is_pointer
+	 || source->type.array_size || dest_type.array_size)
 		return false;
 
 	if (source_base->is_numeric && dest_base->is_numeric) {
@@ -614,14 +612,20 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 		{
 			auto pnode = *node->toString();
 			pnode.value++; // Strings as stored internally with '"'s
-			size_t string_length = strlen(pnode.value) - 1;
+			char *str = pnode.value;
+
+			// TODO: Handle escape sequences
+
+			size_t string_length = strlen(str) - 1;
+
+			// TODO: Handle escape sequences
 
 			PType *byte_type = (PType *)memory->reserve(sizeof(PType));
 			*byte_type = PType(lookup_base_type("uint8"));
 			PType *array_type = (PType *)memory->reserve(sizeof(PType));
 			*array_type = PType(NULL, false, string_length + 1, byte_type);
 			result.type = PType(NULL, true, 0, array_type);
-			result.llvmval = builder->CreateGlobalString(StringRef(pnode.value,
+			result.llvmval = builder->CreateGlobalString(StringRef(str,
 			                                                       string_length));
 			break;
 		}

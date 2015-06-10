@@ -112,7 +112,8 @@ struct PType {
 		return ty.base_type == base_type
 		    && ty.is_pointer == is_pointer
 		    && ty.array_size == array_size
-		    && ty.indirect_type == indirect_type;
+		    && ((!ty.indirect_type && !indirect_type)
+		     || (*ty.indirect_type == *indirect_type));
 	}
 	bool operator!=(const PType &ty) { return !(*this == ty); }
 };
