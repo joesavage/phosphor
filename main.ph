@@ -2,12 +2,17 @@ fn putchar(int32 ch) -> int32;
 fn puts(uint8^ ch) -> int32;
 
 fn main() -> int32 {
-	// TODO: Make escape sequences work.
 	let message = "Hej! Hur mår du?\n";
+
 	putchar((*message)[10]);
 	putchar((*message)[11]);
-	putchar(10);
-	puts((uint8^)*message);
+	putchar((*message)[17]);
+	
+	int32 i = 0;
+	while i < 18 {
+		putchar((*message)[i]);
+		i = i + 1;
+	}
 
 	return 0;
 }

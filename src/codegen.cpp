@@ -611,14 +611,8 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 		case NODE_CONSTANT_STRING:
 		{
 			auto pnode = *node->toString();
-			pnode.value++; // Strings as stored internally with '"'s
 			char *str = pnode.value;
-
-			// TODO: Handle escape sequences
-
-			size_t string_length = strlen(str) - 1;
-
-			// TODO: Handle escape sequences
+			size_t string_length = strlen(str);
 
 			PType *byte_type = (PType *)memory->reserve(sizeof(PType));
 			*byte_type = PType(lookup_base_type("uint8"));

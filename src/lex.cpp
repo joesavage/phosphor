@@ -225,7 +225,6 @@ bool Lexer::scan_number(PToken *token) {
 bool Lexer::validate_escape_sequence() {
 	switch(*++cursor) {
 		case '\\':
-		case '/':
 		case '\'':
 		case '"':
 		case 'a':
@@ -270,10 +269,54 @@ bool Lexer::scan_string(PToken *token) {
 			cursor++;
 		}
 	}
-	cursor++;
 
+	size_t source_length = cursor++ - begin - 1;
 	token->type = TOKEN_STRING;
-	token->value = memory->strndup(begin, cursor - begin);
+	token->value = memory->strndup(begin + 1, source_length);
+
+	// Handle escape sequences
+	size_t cursor_pos = 0, insert_pos = 0;
+	const char *original_string = begin + 1;
+	for (; cursor_pos < source_length; ++cursor_pos, ++insert_pos)
+	{
+		if (original_string[cursor_pos] != '\\') {
+			token->value[insert_pos] = original_string[cursor_pos];
+		} else {
+			switch(original_string[++cursor_pos]) {
+				case '\\':
+					token->value[insert_pos] = '\\';
+					break;
+				case '\'':
+					token->value[insert_pos] = '\'';
+					break;
+				case '"':
+					token->value[insert_pos] = '"';
+					break;
+				case 'a':
+					token->value[insert_pos] = '\a';
+					break;
+				case 'b':
+					token->value[insert_pos] = '\b';
+					break;
+				case 'f':
+					token->value[insert_pos] = '\f';
+					break;
+				case 'n':
+					token->value[insert_pos] = '\n';
+					break;
+				case 'r':
+					token->value[insert_pos] = '\r';
+					break;
+				case 't':
+					token->value[insert_pos] = '\t';
+					break;
+				case 'x':
+					fatal_error("HEX ESCAPE SEQUENCES CURRENTLY UNIMPLEMENTED");
+					break;
+			}
+		}
+	}
+	token->value[insert_pos] = '\0';
 
 	return true;
 }
