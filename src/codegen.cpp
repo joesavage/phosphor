@@ -18,7 +18,7 @@ using namespace llvm;
 
 // TODO: Clean up this whole file. It needs to be a lot tighter than current.
 
-// TODO: The quality of errors in here needs improving.
+// TODO: The quality of errors in here needs SIGNIFICANTLY improving.
 
 // TODO: At some point, we need to focus on quality of the LLVM IR generated.
 //       [COMPARE TO: $ clang -S -emit-llvm foo.c]
