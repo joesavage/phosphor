@@ -119,8 +119,36 @@ ASTNode *Parser::parse_type() {
 		scan_token_type(TOKEN_IDENTIFIER);
 	}
 
-	// TODO: Handle other modifiers (though, should they always have to be after
-	// the typename like this?)
+	// TODO: We need to support parsing of multiple type modifiers. Plus, order matters.
+	// e.g. 'int32[5]^[8]' should be an array of eight pointers to arrays of 5 int32s.
+
+	// TODO: 'int[5]^' should be different to 'int^[5]'.
+	// TODO: Multi-dimensional arrays.
+	if (scan_token(TOKEN_RESERVED_PUNCTUATION, "[")) {
+		PToken *array_size_node = scan_token_type(TOKEN_INT);
+		if (!array_size_node) {
+			set_error("expected array size following '[' in type");
+			return NULL;
+		}
+
+		// TODO: Review whether using 'atoi' is a good idea or not
+		int array_size = atoi(array_size_node->value);
+		if (!array_size) {
+			set_error("attempted to create array type with invalid size");
+			return NULL;
+		}
+
+		if (!scan_token(TOKEN_RESERVED_PUNCTUATION, "]")) {
+			set_error("expected ']' for array type definition");
+			return NULL;
+		}
+
+		// We could probably do some more efficient memory allocation here.
+		PType *old_ty = (PType *)memory->reserve(sizeof(PType));
+		*old_ty = result->toType()->value;
+		result->toType()->value = PType(NULL, false, array_size, old_ty);
+	}
+
 	if (cursor->value[0] == '^') {
 		char *value = scan_token_type(TOKEN_OPERATOR)->value;
 		for (size_t i = 0; i < strlen(value); ++i) {
@@ -128,8 +156,7 @@ ASTNode *Parser::parse_type() {
 				// We could probably do some more efficient memory allocation here.
 				PType *old_ty = (PType *)memory->reserve(sizeof(PType));
 				*old_ty = result->toType()->value;
-				result->toType()->value.indirect_type = old_ty;
-				result->toType()->value.is_pointer = true;
+				result->toType()->value = PType(NULL, true, 0, old_ty);
 			} else {
 				set_error("unexpected operator in variable declaration");
 				return NULL;
