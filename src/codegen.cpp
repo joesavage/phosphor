@@ -370,6 +370,8 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 			// TODO: Handle other operators (>=, etc.)
 			// NOTE: We use 'ordered' floating point comparisons below. I think this
 			// is the correct decision here, but I'm not entirely sure. Check!
+			// TODO: Explore if there's a better way to deal with this through LLVM.
+			// The repeated float/signed branch code is frustrating.
 			result.type = left.type;
 			if (!strcmp(pnode.value, "==")) {
 				result.type = PType(lookup_base_type("bool"));
@@ -398,6 +400,17 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 				else
 					result.llvmval = builder->CreateICmpULT(left.llvmval,
 					                                       right.llvmval, "lttmp");
+			} else if (!strcmp(pnode.value, "<=")) {
+				result.type = PType(lookup_base_type("bool"));
+				if (base_type->is_float)
+					result.llvmval = builder->CreateFCmpOLE(left.llvmval,
+					                                        right.llvmval, "lttmp");
+				else if (base_type->is_signed)
+					result.llvmval = builder->CreateICmpSLE(left.llvmval,
+					                                       right.llvmval, "lttmp");
+				else
+					result.llvmval = builder->CreateICmpULE(left.llvmval,
+					                                       right.llvmval, "lttmp");
 			} else if (!strcmp(pnode.value, ">")) {
 				result.type = PType(lookup_base_type("bool"));
 				if (base_type->is_float)
@@ -408,6 +421,17 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 					                                       right.llvmval, "gttmp");
 				else
 					result.llvmval = builder->CreateICmpUGT(left.llvmval,
+					                                       right.llvmval, "gttmp");
+			} else if (!strcmp(pnode.value, ">=")) {
+				result.type = PType(lookup_base_type("bool"));
+				if (base_type->is_float)
+					result.llvmval = builder->CreateFCmpOGE(left.llvmval,
+					                                        right.llvmval, "gttmp");
+				else if (base_type->is_signed)
+					result.llvmval = builder->CreateICmpSGE(left.llvmval,
+					                                       right.llvmval, "gttmp");
+				else
+					result.llvmval = builder->CreateICmpUGE(left.llvmval,
 					                                       right.llvmval, "gttmp");
 			} else if (!strcmp(pnode.value, "+")) {
 				if (type.is_pointer)

@@ -5,11 +5,15 @@ fn main() -> int32 {
 	let original_message = "Hej! Hur mår du?\n";
 	uint8[5]^ message = original_message;
 
-	putchar((*message)[10]);
-	putchar((*message)[11]);
+	int32 i = 1;
+	while i <= 10 {
+		putchar((*message)[10]);
+		putchar((*message)[11]);
+		i = i + 1; // TODO: 'i += 1' doesn't give an error right now.
+	}
 	putchar((*message)[17]);
 	
-	int32 i = 0;
+	i = 0;
 	while i < 18 {
 		putchar((*message)[i]);
 		i = i + 1;
