@@ -166,9 +166,9 @@ PVariable CodeGenerator::generate_lvalue(ASTNode *node) {
 			auto pnode = *node->toVariableDeclaration();
 			char *variable_name = pnode.name->toString()->value;
 			PType variable_type;
-			if (pnode.type.base_type)
+			if (pnode.type.base_type || pnode.type.indirect_type)
 				variable_type = pnode.type;
-			assert(variable_type.base_type || pnode.init);
+			assert(variable_type.base_type || variable_type.indirect_type || pnode.init);
 			if (env->symbol_table.exists(variable_name)) {
 				set_error(pnode.name, "variable naming conflict");
 				break;
@@ -193,7 +193,7 @@ PVariable CodeGenerator::generate_lvalue(ASTNode *node) {
 					result.type = value.type;
 				}
 			}
-			if (variable_type.base_type)
+			if (variable_type.base_type || variable_type.indirect_type)
 				result.type = variable_type;
 
 			// alloca at the entry block so that the mem2reg pass can hit
@@ -237,9 +237,39 @@ PVariable CodeGenerator::generate_lvalue(ASTNode *node) {
 				break;
 			}
 
-			set_error(node, "unsupported unary operator '%s'", pnode.value);
+			set_error(node, "unsupported unary operator '%s' for generating lvalue", pnode.value);
 			break;
 		}
+		case NODE_BINARY_OPERATOR:
+		{
+			auto pnode = *node->toBinaryOperator();
+
+			if (!strcmp(pnode.value, "[]")) {
+				PVariable left = generate_lvalue(pnode.left);
+				if (error)
+					break;
+
+				PValue right = generate_rvalue(pnode.right);
+				if (error)
+					break;
+
+				// TODO: The errors for this will probably be terrible right now.
+
+				if (left.type.array_size) {
+					std::vector<Value *> indices;
+					indices.push_back(builder->getInt32(0));
+					indices.push_back(right.llvmval);
+					result.type = *left.type.indirect_type;
+					result.llvmval = (AllocaInst *)builder->CreateGEP(left.llvmval, indices);
+					break;
+				}
+				break;
+			}
+
+			set_error(node, "unsupported binary operator '%s' for generating lvalue", pnode.value);
+			break;
+		}
+		// TODO: NODE_BINARY_OPERATOR FOR '[]'
 		default:
 			set_error(node, "failed to generate variable for ASTNode");
 			break;
@@ -259,6 +289,8 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 			// TODO: Handle other operators (+=, etc.)
 			if (!strcmp(pnode.value, "=")) {
 				PVariable left = generate_lvalue(pnode.left);
+				if (error)
+					break;
 				if (!isa<AllocaInst>(left.llvmval)) {
 					set_error(pnode.left, "value on left of assignment is not an lvalue");
 					break;
@@ -297,25 +329,12 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 			// Since this requires operator overloading anyway, maybe the solution to
 			// the ptr to arr problem should be in overloading.
 			if (!strcmp(pnode.value, "[]")) {
-				PVariable left = generate_lvalue(pnode.left);
+				PVariable value = generate_lvalue(node);
 				if (error)
 					break;
-
-				PValue right = generate_rvalue(pnode.right);
-				if (error)
-					break;
-
-				// TODO: The errors for this will probably be terrible right now.
-
-				if (left.type.array_size) {
-					std::vector<Value *> indices;
-					indices.push_back(builder->getInt32(0));
-					indices.push_back(right.llvmval);
-					result.type = *left.type.indirect_type;
-					result.llvmval = builder->CreateGEP(left.llvmval, indices);
-					result.llvmval = builder->CreateLoad(result.llvmval);
-					break;
-				}
+				result.type = value.type;
+				result.llvmval = builder->CreateLoad(value.llvmval);
+				break;
 			}
 
 
@@ -351,8 +370,8 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 					cast_success = implicit_type_convert(&right, left.type);
 
 				if (!cast_success) {
-					set_error(pnode.right, "type mismatch in binary operation - expected "
-					          "'%s', got '%s'", left.type.to_string(),
+					set_error(pnode.right, "type mismatch in binary operation '%s' - expected "
+					          "'%s', got '%s'", pnode.value, left.type.to_string(),
 					          right.type.to_string());
 					break;
 				}
@@ -467,9 +486,8 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 					result.llvmval = builder->CreateSub(left.llvmval,
 					                                    right.llvmval, "subtmp");
 			} else {
-				set_error(node, "unsupported operator '%s'", pnode.value);
+				set_error(node, "unsupported binary operator '%s' for generating rvalue", pnode.value);
 			}
-
 			break;
 		}
 		case NODE_UNARY_OPERATOR:
@@ -480,6 +498,7 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 			// (Particularly, if we're negating an int literal)
 
 			if (!strcmp(pnode.value, "&")) {
+				// TODO: This check is weird. '&(arr[0])', for example, shouldn't fail here.
 				if (pnode.operand->type != NODE_IDENTIFIER) {
 					set_error(pnode.operand, "invalid operand to '&'");
 					break;
@@ -513,7 +532,7 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 				break;
 			}
 
-			set_error(node, "unsupported unary operator '%s'", pnode.value);
+			set_error(node, "unsupported unary operator '%s' for generating rvalue", pnode.value);
 			break;
 		}
 		case NODE_CAST_OPERATOR:

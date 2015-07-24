@@ -68,6 +68,7 @@ PToken *Parser::scan_token(PTokenType type, const char *value) {
 ASTNode *Parser::parse_constant() {
 	ASTNode *result = NULL;
 
+	// If we want char constants, they should go here too.
 	PToken *token = NULL;
 	if ((token = scan_token_type(TOKEN_INT))) {
 		result = create_node(NODE_CONSTANT_INT);
@@ -251,8 +252,27 @@ ASTNode *Parser::parse_unary_operators() {
 }
 
 ASTNode *Parser::parse_atom() {
+	// TODO: What about postfix unary operators?
 	ASTNode *result = parse_unary_operators();
-	ASTNode *&term = result ? (result->type == NODE_CAST_OPERATOR ? result->toCastOperator()->operand : result->toUnaryOperator()->operand) : result;
+
+	// Fix for multiple unary operators. Ideally, this would get returned from
+	// 'parse_unary_operators' instead (multiple return values or whatever).
+	ASTNode *last_op = result;
+	while (last_op && (last_op->type == NODE_UNARY_OPERATOR || last_op->type == NODE_CAST_OPERATOR)) {
+		if (last_op->type == NODE_UNARY_OPERATOR) {
+			auto operand = last_op->toUnaryOperator()->operand;
+			if (!operand)
+				break;
+			last_op = last_op->toUnaryOperator()->operand;
+		} else {
+			auto operand = last_op->toCastOperator()->operand;
+			if (!operand)
+				break;
+			last_op = operand;
+		}
+	}
+
+	ASTNode *&term = result ? (last_op->type == NODE_CAST_OPERATOR ? last_op->toCastOperator()->operand : last_op->toUnaryOperator()->operand) : result;
 
 	if ((term = parse_identifier())) {
 		if (scan_token(TOKEN_RESERVED_PUNCTUATION, "(")) {
@@ -301,6 +321,8 @@ ASTNode *Parser::parse_expression(bool silent_mode,
 
 	// TODO: Ternary operators need to be handled as a special case here!
 
+	// TODO: This precedence is wrong. We want this to have a higher
+	// precedence - it needs to be part of the 'atom'.
 	// Parse array accesses
 	ASTNode *array_index = NULL;
 	if (scan_token(TOKEN_RESERVED_PUNCTUATION, "[")
