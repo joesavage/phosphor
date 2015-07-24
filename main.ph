@@ -9,7 +9,7 @@ fn main() -> int32 {
 	while i <= 10 {
 		putchar((*message)[10]);
 		putchar((*message)[11]);
-		i = i + 1; // TODO: 'i += 1' doesn't give an error right now.
+		i += 1;
 	}
 	putchar((*message)[17]);
 	

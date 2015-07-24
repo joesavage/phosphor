@@ -466,7 +466,10 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 				else
 					result.llvmval = builder->CreateSub(left.llvmval,
 					                                    right.llvmval, "subtmp");
+			} else {
+				set_error(node, "unsupported operator '%s'", pnode.value);
 			}
+
 			break;
 		}
 		case NODE_UNARY_OPERATOR:
