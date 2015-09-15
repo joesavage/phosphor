@@ -58,6 +58,7 @@ void ASTNode::initialise(ASTNodeType type) {
 			toBinaryOperator()->left = NULL;
 			toBinaryOperator()->right = NULL;
 			break;
+		case NODE_CONSTANT_INT:
 		case NODE_CONSTANT_BOOL:
 			toInteger()->value = 0;
 			break;
@@ -65,7 +66,6 @@ void ASTNode::initialise(ASTNodeType type) {
 			toType()->value = PType();
 			break;
 		case NODE_IDENTIFIER:
-		case NODE_CONSTANT_INT:
 		case NODE_CONSTANT_FLOAT:
 		case NODE_CONSTANT_STRING:
 			toString()->value = NULL;
@@ -80,12 +80,12 @@ struct ASTNode::data::real *ASTNode::toReal() {
 	return &this->data.real;
 }
 struct ASTNode::data::integer *ASTNode::toInteger() {
-	assert(type == NODE_CONSTANT_BOOL);
+	assert(type == NODE_CONSTANT_INT || type == NODE_CONSTANT_BOOL);
 	return &this->data.integer;
 }
 struct ASTNode::data::string *ASTNode::toString() {
 	assert(type == NODE_CONSTANT_STRING || type == NODE_IDENTIFIER ||
-	       type == NODE_CONSTANT_INT || type == NODE_CONSTANT_FLOAT);
+	       type == NODE_CONSTANT_FLOAT);
 	return &this->data.string;
 }
 struct ASTNode::data::unary_operator *ASTNode::toUnaryOperator() {

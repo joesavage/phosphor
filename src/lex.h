@@ -2,6 +2,7 @@
 #define LEX_H
 
 #include <stddef.h>
+#include <ctype.h>
 
 #include "memoryarena.h"
 
@@ -40,6 +41,11 @@ struct POperator {
 		this->precedence = precedence;
 	}
 };
+
+static inline bool is_radix_prefix(char ch) {
+	ch = tolower(ch);
+	return (ch == 'x' || ch == 'b' || ch == 'o');
+}
 
 struct PToken {
 	PTokenType type;

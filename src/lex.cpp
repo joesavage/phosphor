@@ -2,7 +2,6 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stddef.h>
-#include <ctype.h>
 #include <string.h>
 
 #include "lex.h"
@@ -16,11 +15,6 @@ static int isoctal(int ch) {
 
 static int isbinary(int ch) {
 	return '0' <= ch && ch <= '1';
-}
-
-static bool is_radix_prefix(char ch) {
-	ch = tolower(ch);
-	return (ch == 'x' || ch == 'b' || ch == 'o');
 }
 
 void Lexer::set_error(const char *format, ...) {
@@ -215,7 +209,7 @@ bool Lexer::scan_number(PToken *token) {
 
 		token->type = is_float ? TOKEN_FLOAT : TOKEN_INT;
 		token->value = memory->strndup(begin, cursor - begin);
-		
+
 		return true;
 	}
 

@@ -96,6 +96,7 @@ static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 				printf_ast(pdata.right, "RIGHT", depth + 1);
 				break;
 			}
+			case NODE_CONSTANT_INT:
 			case NODE_CONSTANT_BOOL:
 			{
 				printf("INT<%zu>\n", node->toInteger()->value);
@@ -108,7 +109,6 @@ static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 				break;
 			}
 			case NODE_IDENTIFIER:
-			case NODE_CONSTANT_INT:
 			case NODE_CONSTANT_FLOAT:
 			case NODE_CONSTANT_STRING:
 			{
@@ -183,6 +183,7 @@ int main() {
 	MemoryArena transient_memory(2097152); // TODO: Evaluate this initial size
 	lexer.memory = &transient_memory;
 	parser.memory = &transient_memory;
+	generator.memory = &transient_memory;
 
 	HashMap<POperator> &unary_operators = parser.unary_operators;
 	unary_operators.size = 16;
@@ -287,7 +288,6 @@ int main() {
 	printf("\n\n");
 
 	// Parsing
-	parser.memory = lexer.memory;
 	generator.root = parser.parse();
 	free(parser.tokens);
 	// TODO: Fancy errors which output the text containing the issue would be good
@@ -306,7 +306,6 @@ int main() {
 	 // Code Generation
 	printf("\nLLVM IR: \n");
 	generator.env = parser.env;
-	generator.memory = parser.memory;
 	Module *module = generator.generate();
 	if (generator.error) {
 		if (generator.errnode)
@@ -323,7 +322,7 @@ int main() {
 	write_module_to_file(module, output_filename);
 
 	delete module;
-	parser.memory->free();
+	transient_memory.free();
 
 	return 0;	
 }

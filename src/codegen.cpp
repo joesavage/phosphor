@@ -600,19 +600,8 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 		case NODE_CONSTANT_INT:
 		{
 			// TODO: Need to deal with hex, etc.
-			auto pnode = *node->toString();
-			char *endptr = pnode.value;
-			unsigned long long value = strtoull(pnode.value, &endptr, 10);
-			assert(sizeof(value) >= 8);
-			if (endptr == pnode.value
-			 || (size_t)(endptr - pnode.value) < (strlen(pnode.value))) {
-				set_error(node, "failed to parse invalid integer literal");
-				break;
-			}
-			if (errno == ERANGE) {
-				set_error(node, "integer literal too large");
-				break;
-			}
+			auto pnode = *node->toInteger();
+			size_t value = pnode.value;
 
 			// Integer literals are unsigned by default, and are put into the smallest
 			// type they fit in.

@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stddef.h>
 #include <string.h>
+#include <errno.h>
 
 #include "lex.h"
 #include "AST.h"
@@ -69,10 +70,45 @@ ASTNode *Parser::parse_constant() {
 	ASTNode *result = NULL;
 
 	// If we want char constants, they should go here too.
+	// TODO: Not quite sure how to handle it, but if there's a TOKEN_INT followed
+	// immediately by a TOKEN_IDENTIFIER, that should be an error in the parser (
+	// rather than being left to the code generator to fail with the IDENTIFIER).
 	PToken *token = NULL;
 	if ((token = scan_token_type(TOKEN_INT))) {
 		result = create_node(NODE_CONSTANT_INT);
-		result->toString()->value = token->value;
+
+		int base = 10;
+		if (token->value[0] == '0' && is_radix_prefix(token->value[1])) {
+			++token->value;
+			switch (token->value[0]) {
+				case 'x':
+					base = 16;
+					break;
+				case 'o':
+					base = 8;
+					break;
+				case 'b':
+					base = 2;
+					break;
+				default:
+					set_error("INTERNAL COMPILER ERROR: bad numeric prefix from lexer");
+					return NULL;
+			}
+			++token->value;
+		}
+
+		errno = 0;
+		char *endptr = token->value;
+		result->toInteger()->value = strtol(token->value, &endptr, base);
+		assert(sizeof(result->toInteger()->value) >= 8);
+		if (errno == ERANGE) {
+			set_error("failed to parse out of range number");
+			return NULL;
+		} else if (errno != 0
+			|| (size_t)(endptr - token->value) < strlen(token->value)) {
+			set_error("failed to parse number with base %d", base);
+			return NULL;
+		}
 	} else if ((token = scan_token_type(TOKEN_FLOAT))) {
 		result = create_node(NODE_CONSTANT_FLOAT);
 		result->toString()->value = token->value;
