@@ -806,9 +806,13 @@ PFunction CodeGenerator::generate_function(ASTNode *node) {
 
 			env = prev_env;
 
-			result = function;
-			verifyFunction(*function.llvmval);
+			if (verifyFunction(*function.llvmval)) {
+				// TODO: Improve this error
+				set_error(node, "function verification failed (perhaps you missed a return statement or something?)");
+				break;
+			}
 			fpm->run(*function.llvmval);
+			result = function;
 			break;
 		}
 		default:
@@ -1012,7 +1016,10 @@ Module *CodeGenerator::generate(int optimisation_level) {
 	generate_statement(root);
 	if (error)
 		return NULL;
-	verifyModule(*module);
+	if (verifyModule(*module)) {
+		fatal_error("Failed to verify program module.");
+		return NULL;
+	}
 
 	return module;
 }

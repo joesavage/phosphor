@@ -6,7 +6,7 @@ fn main() -> int32 {
 	message[0] = 72;
 	message[1] = 0x65;
 	message[2] = 0o171;
-	message[3] = 0b100001;
+	message[3] = 0b1002001; 50ab; // TODO: Fix me!
 	message[4] = 0;
 
 	int32 i = 5;

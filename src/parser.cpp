@@ -70,10 +70,11 @@ ASTNode *Parser::parse_constant() {
 	ASTNode *result = NULL;
 
 	// If we want char constants, they should go here too.
-	// TODO: Not quite sure how to handle it, but if there's a TOKEN_INT followed
-	// immediately by a TOKEN_IDENTIFIER, that should be an error in the parser (
-	// rather than being left to the code generator to fail with the IDENTIFIER).
-	// TODO: '0b1002001' gets parsed as '0b100 2001', which should be fixed.
+	// TODO: MORE SEMI-COLON/WHITESPACE NRELATED PARSING PROBLEMS:
+	//   - Not quite sure how to handle it, but if there's a TOKEN_INT followed
+	//   immediately by a TOKEN_IDENTIFIER, that should be an error in the parser
+	//   (rather than being left to the code generator to fail with the IDENTIFIER).
+	//   - '0b1002001' gets parsed as '0b100 2001', which should be fixed.
 	PToken *token = NULL;
 	if ((token = scan_token_type(TOKEN_INT))) {
 		result = create_node(NODE_CONSTANT_INT);
@@ -521,6 +522,9 @@ ASTNode *Parser::parse_function() {
 		return NULL;
 	}
 
+	// TODO: This is an inconsistancy! Apparently we require semicolons
+	// for function prototypes, but not for line endings? This makes the
+	// syntax of the language very confusing!
 	if (scan_token(TOKEN_RESERVED_PUNCTUATION, ";")) {
 		env = prev_env;
 		return signature;
@@ -636,6 +640,10 @@ ASTNode *Parser::parse_statements() {
 			result = create_node(NODE_STATEMENTS);
 		
 		result->toStatements()->children.add(statement);
+
+		// TODO: If we really don't care about semicolons, we're going to
+		// need more complex parsing rules (probably involving whitespace,
+		// which currently - the parser knows nothing about!). Hmm...
 		scan_token(TOKEN_RESERVED_PUNCTUATION, ";");
 	}
 
