@@ -9,10 +9,10 @@ fn main() -> int32 {
 	message[3] = 0b100001;
 	message[4] = 0;
 
-	int32 i = 1;
-	while i <= 3 {
+	int32 i = 5;
+	while i != 0 {
 		puts((uint8^)&message);
-		i = i + 1;
+		i = i - 1;
 	}
 
 	return 0;

@@ -22,7 +22,7 @@ struct CodeGenerator {
 	IRBuilder<> *builder;
 	FunctionPassManager *fpm;
 
-	Module *generate();
+	Module *generate(int optimisation_level);
 private:
 	void generate_statement(ASTNode *node);
 	PVariable generate_lvalue(ASTNode *node);

@@ -44,14 +44,14 @@ static void write_module_to_file(Module *module, const char *path) {
 static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 	if (node != NULL) {
 		for (size_t i = 0; i < depth; ++i)
-			printf("   ");
+			fprintf(stderr, "   ");
 		if (prefix)
-			printf("%s: ", prefix);
+			fprintf(stderr, "%s: ", prefix);
 		switch (node->type) {
 			case NODE_STATEMENTS:
 			{
 				auto pdata = *node->toStatements();
-				printf("STATEMENTS\n");
+				fprintf(stderr, "STATEMENTS\n");
 				for (size_t i = 0; i < pdata.children.size(); ++i)
 					printf_ast(pdata.children[i], "STMT", depth + 1);
 				break;
@@ -59,17 +59,17 @@ static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 			case NODE_BLOCK:
 			{
 				auto pdata = *node->toBlock();
-				printf("BLOCK\n");
+				fprintf(stderr, "BLOCK\n");
 				printf_ast(pdata.statements, "STATEMENTS", depth + 1);
 				break;
 			}
 			case NODE_VARIABLE_DECLARATION:
 			{
 				auto pdata = *node->toVariableDeclaration();
-				printf("VARDECL\n");
+				fprintf(stderr, "VARDECL\n");
 				for (size_t i = 0; i < depth; ++i)
-					printf("   ");
-				printf("TYPE<%s>\n", pdata.type.to_string());
+					fprintf(stderr, "   ");
+				fprintf(stderr, "TYPE<%s>\n", pdata.type.to_string());
 				printf_ast(pdata.name, "NAME", depth + 1);
 				printf_ast(pdata.init, "INIT", depth + 1);
 				break;
@@ -77,21 +77,21 @@ static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 			case NODE_UNARY_OPERATOR:
 			{
 				auto pdata = *node->toUnaryOperator();
-				printf("UNARY_OP<%s>\n", pdata.value);
+				fprintf(stderr, "UNARY_OP<%s>\n", pdata.value);
 				printf_ast(pdata.operand, "OPERAND", depth + 1);
 				break;
 			}
 			case NODE_CAST_OPERATOR:
 			{
 				auto pdata = *node->toCastOperator();
-				printf("CAST<%s>\n", pdata.type.to_string());
+				fprintf(stderr, "CAST<%s>\n", pdata.type.to_string());
 				printf_ast(pdata.operand, "OPERAND", depth + 1);
 				break;	
 			}
 			case NODE_BINARY_OPERATOR:
 			{
 				auto pdata = *node->toBinaryOperator();
-				printf("BINARY_OP<%s>\n", pdata.value);
+				fprintf(stderr, "BINARY_OP<%s>\n", pdata.value);
 				printf_ast(pdata.left, "LEFT", depth + 1);
 				printf_ast(pdata.right, "RIGHT", depth + 1);
 				break;
@@ -99,26 +99,26 @@ static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 			case NODE_CONSTANT_INT:
 			case NODE_CONSTANT_BOOL:
 			{
-				printf("INT<%zu>\n", node->toInteger()->value);
+				fprintf(stderr, "INT<%zu>\n", node->toInteger()->value);
 				break;
 			}
 			case NODE_TYPE:
 			{
 				auto pdata = *node->toType();
-				printf("TYPE<%s>\n", pdata.value.to_string());
+				fprintf(stderr, "TYPE<%s>\n", pdata.value.to_string());
 				break;
 			}
 			case NODE_IDENTIFIER:
 			case NODE_CONSTANT_FLOAT:
 			case NODE_CONSTANT_STRING:
 			{
-				printf("STRING<%s>\n", node->toString()->value);
+				fprintf(stderr, "STRING<%s>\n", node->toString()->value);
 				break;
 			}
 			case NODE_FUNCTION:
 			{
 				auto pdata = *node->toFunction();
-				printf("FUNCTION\n");
+				fprintf(stderr, "FUNCTION\n");
 				printf_ast(pdata.signature, "SIG", depth + 1);
 				printf_ast(pdata.body, "BODY", depth + 1);
 				break;
@@ -126,11 +126,11 @@ static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 			case NODE_FUNCTION_SIGNATURE:
 			{
 				auto pdata = *node->toFunctionSignature();
-				printf("FUNCTION_SIG\n");
+				fprintf(stderr, "FUNCTION_SIG\n");
 				printf_ast(pdata.name, "NAME", depth + 1);
 				for (size_t i = 0; i < depth; ++i)
-					printf("   ");
-				printf("TYPE<%s>\n", pdata.type.to_string());
+					fprintf(stderr, "   ");
+				fprintf(stderr, "TYPE<%s>\n", pdata.type.to_string());
 				for (size_t i = 0; i < pdata.args.size(); ++i)
 					printf_ast(pdata.args[i], "ARGS", depth + 1);
 				break;
@@ -138,7 +138,7 @@ static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 			case NODE_FUNCTION_CALL:
 			{
 				auto pdata = *node->toFunctionCall();
-				printf("FUNCTION_CALL\n");
+				fprintf(stderr, "FUNCTION_CALL\n");
 				printf_ast(pdata.name, "NAME", depth + 1);
 				for (size_t i = 0; i < pdata.args.size(); ++i)
 					printf_ast(pdata.args[i], "ARGS", depth + 1);
@@ -146,13 +146,13 @@ static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 			}
 			case NODE_RETURN:
 			{
-				printf("RETURN\n");
+				fprintf(stderr, "RETURN\n");
 				printf_ast(node->toUnaryOperator()->operand, "EXPR", depth + 1);
 				break;
 			}
 			case NODE_IF:
 			{
-				printf("IF\n");
+				fprintf(stderr, "IF\n");
 				printf_ast(node->toConditional()->condition, "COND", depth + 1);
 				printf_ast(node->toConditional()->then, "THEN", depth + 1);
 				printf_ast(node->toConditional()->otherwise, "ELSE", depth + 1);
@@ -166,16 +166,20 @@ static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 			case NODE_CONTINUE:
 			default:
 			{
-				printf("%d\n", node->type);
+				fprintf(stderr, "%d\n", node->type);
 				break;
 			}
 		}
 	}
 }
 
+static void usage(const char *program_name) {
+	fatal_error("usage: %s [-O optimisation_level] [-o output_file]\n", program_name);
+}
+
 #include "memorylist.hpp"
 
-int main() {
+int main(int argc, char *argv[]) {
 	Lexer lexer = {};
 	Parser parser = {};
 	CodeGenerator generator = {};
@@ -184,6 +188,34 @@ int main() {
 	lexer.memory = &transient_memory;
 	parser.memory = &transient_memory;
 	generator.memory = &transient_memory;
+
+	// Parse CLI args
+	const char *output_filename = "out.bc";
+	int optimisation_level = 0;
+	{
+		extern char *optarg;
+		extern int optind;
+		int ch;
+		while ((ch = getopt(argc, argv, "h?O:o:")) != EOF) {
+			switch(ch) {
+				case 'o':
+					output_filename = optarg;
+					break;
+				case 'O':
+					optimisation_level = atoi(optarg);
+					if (optimisation_level < 0 || optimisation_level > 1)
+						fatal_error("illegal optimisation level value\n");
+					break;
+				case '?':
+				case 'h':
+				default:
+					usage(argv[0]);
+			}
+		}
+		argc -= optind;
+		argv += optind;
+	}
+
 
 	HashMap<POperator> &unary_operators = parser.unary_operators;
 	unary_operators.size = 16;
@@ -282,10 +314,10 @@ int main() {
 	}
 
 	// Lex Debug Output
-	printf("Tokens: ");
+	fprintf(stderr, "Tokens: ");
 	for (size_t i = 0; i < parser.token_count; ++i)
-		printf("%u<%s> ", parser.tokens[i].type, parser.tokens[i].value);
-	printf("\n\n");
+		fprintf(stderr, "%u<%s> ", parser.tokens[i].type, parser.tokens[i].value);
+	fprintf(stderr, "\n\n");
 
 	// Parsing
 	generator.root = parser.parse();
@@ -304,9 +336,9 @@ int main() {
 	printf_ast(generator.root, "ROOT");
 
 	 // Code Generation
-	printf("\nLLVM IR: \n");
+	fprintf(stderr, "\nLLVM IR: \n");
 	generator.env = parser.env;
-	Module *module = generator.generate();
+	Module *module = generator.generate(optimisation_level);
 	if (generator.error) {
 		if (generator.errnode)
 			fatal_error("Codegen failed at line %d, col %d: %s\n",
@@ -318,7 +350,6 @@ int main() {
 
 	// TODO: Set filename and debug level in CLI flags.
 	module->dump();
-	const char *output_filename = "test.bc";
 	write_module_to_file(module, output_filename);
 
 	delete module;

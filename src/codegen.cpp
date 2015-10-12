@@ -377,6 +377,8 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 				}
 			}
 
+			// TODO: We probably shouldn't be gating off most binary operators
+			// to numeric and pointer types only. FIx the structure of this!
 			PType type = left.type;
 			PBaseType *base_type = type.getBaseType();
 			if (!base_type->is_numeric && !type.is_pointer) {
@@ -972,7 +974,7 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 	}
 }
 
-Module *CodeGenerator::generate() {
+Module *CodeGenerator::generate(int optimisation_level) {
 	InitializeNativeTarget();
 	InitializeNativeTargetAsmPrinter();
 	InitializeNativeTargetAsmParser();
@@ -990,16 +992,17 @@ Module *CodeGenerator::generate() {
 
 	// TODO: Think about (and extend) code passes (optimisation, etc.)
 	// Additionally, the order of these needs to be properly thought about!
-	// TODO: Perform optimisations based on passed optimisation flags.
 	FunctionPassManager fpm(module);
-	fpm.add(createBasicAliasAnalysisPass());
-	fpm.add(createPromoteMemoryToRegisterPass());
-	fpm.add(createReassociatePass());
-	fpm.add(createConstantPropagationPass());
-	fpm.add(createDeadCodeEliminationPass());
-	fpm.add(createGVNPass());
-	fpm.add(createCFGSimplificationPass());
-	fpm.add(createInstructionCombiningPass());
+	if (optimisation_level >= 1) {
+		fpm.add(createBasicAliasAnalysisPass());
+		fpm.add(createPromoteMemoryToRegisterPass());
+		fpm.add(createReassociatePass());
+		fpm.add(createConstantPropagationPass());
+		fpm.add(createDeadCodeEliminationPass());
+		fpm.add(createGVNPass());
+		fpm.add(createCFGSimplificationPass());
+		fpm.add(createInstructionCombiningPass());
+	}
 	fpm.doInitialization();
 	this->fpm = &fpm;
 
