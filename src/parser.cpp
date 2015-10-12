@@ -66,15 +66,24 @@ PToken *Parser::scan_token(PTokenType type, const char *value) {
 	return NULL;
 }
 
+PToken *Parser::scan_end_of_line() {
+	// TODO: In future, accept newlines instead of strictly requiring
+	// semicolons. Right now though, the parser doesn't know how to handle
+	// whitespace (inc. newlines).
+	// ALSO: We might run into problems where we didn't expect the parser
+	// to care about newlines where we now do. e.g. using newlines in
+	// place of semicolons could result in a function with the brace being
+	// put on the next line rather than the current line being parsed
+	// incorrectly.
+	if (peek_token(TOKEN_RESERVED_PUNCTUATION, ";"))
+		return cursor++;
+	return NULL;
+}
+
 ASTNode *Parser::parse_constant() {
 	ASTNode *result = NULL;
 
 	// If we want char constants, they should go here too.
-	// TODO: MORE SEMI-COLON/WHITESPACE NRELATED PARSING PROBLEMS:
-	//   - Not quite sure how to handle it, but if there's a TOKEN_INT followed
-	//   immediately by a TOKEN_IDENTIFIER, that should be an error in the parser
-	//   (rather than being left to the code generator to fail with the IDENTIFIER).
-	//   - '0b1002001' gets parsed as '0b100 2001', which should be fixed.
 	PToken *token = NULL;
 	if ((token = scan_token_type(TOKEN_INT))) {
 		result = create_node(NODE_CONSTANT_INT);
@@ -522,10 +531,7 @@ ASTNode *Parser::parse_function() {
 		return NULL;
 	}
 
-	// TODO: This is an inconsistancy! Apparently we require semicolons
-	// for function prototypes, but not for line endings? This makes the
-	// syntax of the language very confusing!
-	if (scan_token(TOKEN_RESERVED_PUNCTUATION, ";")) {
+	if (!peek_token(TOKEN_RESERVED_PUNCTUATION, "{")) {
 		env = prev_env;
 		return signature;
 	} else {
@@ -641,10 +647,10 @@ ASTNode *Parser::parse_statements() {
 		
 		result->toStatements()->children.add(statement);
 
-		// TODO: If we really don't care about semicolons, we're going to
-		// need more complex parsing rules (probably involving whitespace,
-		// which currently - the parser knows nothing about!). Hmm...
-		scan_token(TOKEN_RESERVED_PUNCTUATION, ";");
+		if (!scan_end_of_line()) {
+			set_error("expected end of line");
+			break;
+		}
 	}
 
 	return result;

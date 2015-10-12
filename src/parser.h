@@ -31,6 +31,7 @@ private:
 	ASTNode *create_node(ASTNodeType type);
 	PToken *scan_token(PTokenType type, const char *value);
 	PToken *scan_token_type(PTokenType type);
+	PToken *scan_end_of_line();
 	void set_error(const char *format, ...);
 
 	ASTNode *parse_constant();
