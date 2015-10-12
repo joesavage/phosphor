@@ -151,11 +151,11 @@ ASTNode *Parser::parse_type() {
 		return NULL;
 
 	PBaseType *pbasetype = search_for_type(*env, cursor->value);
-	if (pbasetype) {
-		result = create_node(NODE_TYPE);
-		result->toType()->value = PType(pbasetype);
-		scan_token_type(TOKEN_IDENTIFIER);
-	}
+	if (!pbasetype)
+		return NULL;
+	result = create_node(NODE_TYPE);
+	result->toType()->value = PType(pbasetype);
+	scan_token_type(TOKEN_IDENTIFIER);
 
 	// TODO: We need to support parsing of multiple type modifiers. Plus, order matters.
 	// e.g. 'int32[5]^[8]' should be an array of eight pointers to arrays of 5 int32s.
@@ -315,12 +315,15 @@ ASTNode *Parser::parse_atom() {
 		if (scan_token(TOKEN_RESERVED_PUNCTUATION, "(")) {
 			ASTNode *call = create_node(NODE_FUNCTION_CALL);
 
-			ASTNode *arg;
-			// TODO: 'func(arg1, arg2,)' parses without errors at current.
-			while ((arg = parse_expression())) {
-				call->toFunctionCall()->args.add(arg);
-				if (!scan_token(TOKEN_RESERVED_PUNCTUATION, ","))
-					break;
+			if (!peek_token(TOKEN_RESERVED_PUNCTUATION, ")")) {
+				do {
+					ASTNode *arg = parse_expression();
+					if (!arg) {
+						set_error("invalid function argument");
+						return NULL;
+					}
+					call->toFunctionCall()->args.add(arg);
+				} while (scan_token(TOKEN_RESERVED_PUNCTUATION, ","));
 			}
 
 			call->toFunctionCall()->name = term;
@@ -417,10 +420,16 @@ ASTNode *Parser::parse_expression(bool silent_mode,
 ASTNode *Parser::parse_variable_declaration() {
 	ASTNode *result = create_node(NODE_VARIABLE_DECLARATION);
 
-	if (!scan_token(TOKEN_KEYWORD, "let"))
-		result->toVariableDeclaration()->type = parse_type()->toType()->value;
-	else
+	if (!scan_token(TOKEN_KEYWORD, "let")) {
+		ASTNode *type = parse_type();
+		if (!type) {
+			set_error("invalid type in variable declaration");
+			return NULL;
+		}
+		result->toVariableDeclaration()->type = type->toType()->value;
+	} else {
 		result->toVariableDeclaration()->type = NULL;
+	}
 
 	if (peek_token_type(TOKEN_KEYWORD)) {
 		set_error("cannot declare variable with reserved keyword name");
@@ -487,11 +496,16 @@ ASTNode *Parser::parse_function() {
 		return NULL;
 	}
 
-	ASTNode *arg;
-	while ((peek_type()) && (arg = parse_variable_declaration())) {
-		signature->toFunctionSignature()->args.add(arg);
-		if (!scan_token(TOKEN_RESERVED_PUNCTUATION, ","))
-			break;
+
+	if (!peek_token(TOKEN_RESERVED_PUNCTUATION, ")")) {
+		do {
+			ASTNode *arg = parse_variable_declaration();
+			if (!arg) {
+				set_error("invalid variable declaration in function parameter list");
+				return NULL;
+			}
+			signature->toFunctionSignature()->args.add(arg);
+		} while (scan_token(TOKEN_RESERVED_PUNCTUATION, ","));
 	}
 
 	if (!scan_token(TOKEN_RESERVED_PUNCTUATION, ")")) {

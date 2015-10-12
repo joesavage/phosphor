@@ -378,7 +378,7 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 			}
 
 			// TODO: We probably shouldn't be gating off most binary operators
-			// to numeric and pointer types only. FIx the structure of this!
+			// to numeric and pointer types only. Fix the structure of this!
 			PType type = left.type;
 			PBaseType *base_type = type.getBaseType();
 			if (!base_type->is_numeric && !type.is_pointer) {
@@ -592,6 +592,9 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 			if (error)
 				break;
 
+			// TODO: This fails for a function that returns 'void' (you can't)
+			// assign names (e.g. 'calltmp') to 'void' values (for obvious
+			// reasons).
 			result.type = pfunction->return_type;
 			result.llvmval = builder->CreateCall(function,
 			                                     ArrayRef<Value *>(args.getPointer(0),
