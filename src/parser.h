@@ -41,7 +41,7 @@ private:
 	ASTNode *parse_binary_operator();
 	ASTNode *parse_unary_operators();
 	ASTNode *parse_atom();
-	ASTNode *parse_expression(bool silent_mode = false, unsigned char
+	ASTNode *parse_expression(unsigned char
 	                          minimum_precedence = MINIMUM_PRECEDENCE);
 	ASTNode *parse_variable_declaration();
 	ASTNode *parse_block();

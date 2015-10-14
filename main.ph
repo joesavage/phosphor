@@ -1,6 +1,8 @@
 fn putchar(int32 ch) -> int32;
 fn puts(uint8^ ch) -> int32;
 
+// TODO: If I leave out the function signature we parse this (incorrectly)
+// as a block (error: "invalid 'current' function for alloca creation").
 fn main() -> int32 {
 	uint8[5] message;
 	message[0] = 72;

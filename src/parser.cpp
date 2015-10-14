@@ -10,6 +10,11 @@
 #include "parser.h"
 #include "helpers.h"
 
+// TODO: We need to deal with the ambiguity of whether 'parse_' functions
+// can result in a half-parsed mess state or not (and, thus, whether we
+// can call a particular 'parse_' function to just check whether something
+// will parse, or whether that's awaiting a half-parsed disaster).
+
 void Parser::set_error(const char *format, ...) {
 	free(error);
 
@@ -253,6 +258,7 @@ ASTNode *Parser::parse_unary_operator() {
 		} else { // It must be a cast!
 			assert(scan_token(TOKEN_RESERVED_PUNCTUATION, "("));
 			ASTNode *type = parse_type();
+			assert(type);
 			assert(scan_token(TOKEN_RESERVED_PUNCTUATION, ")"));
 			result = create_node(NODE_CAST_OPERATOR);
 			result->toCastOperator()->type = type->toType()->value;
@@ -284,6 +290,7 @@ ASTNode *Parser::parse_unary_operators() {
 	while (peek_unary_operator())
 	{
 		op = parse_unary_operator();
+
 		if (!result) {
 			result = last_op = op;
 		} else {
@@ -321,7 +328,9 @@ ASTNode *Parser::parse_atom() {
 
 	ASTNode *&term = result ? (last_op->type == NODE_CAST_OPERATOR ? last_op->toCastOperator()->operand : last_op->toUnaryOperator()->operand) : result;
 
-	if ((term = parse_identifier())) {
+	if (peek_token_type(TOKEN_IDENTIFIER)) {
+		term = parse_identifier();
+		assert(term);
 		if (scan_token(TOKEN_RESERVED_PUNCTUATION, "(")) {
 			ASTNode *call = create_node(NODE_FUNCTION_CALL);
 
@@ -362,8 +371,7 @@ ASTNode *Parser::parse_atom() {
 }
 
 // Parse expressions via precedence climbing
-ASTNode *Parser::parse_expression(bool silent_mode,
-                                  unsigned char minimum_precedence)
+ASTNode *Parser::parse_expression(unsigned char minimum_precedence)
 {
 	ASTNode *result = parse_atom();
 	if (!result || error)
@@ -385,6 +393,8 @@ ASTNode *Parser::parse_expression(bool silent_mode,
 		array_access->toBinaryOperator()->right = array_index;
 		result = array_access;
 	}
+	if (error)
+		return NULL;
 		
 
 	POperator operator_properties;
@@ -399,6 +409,7 @@ ASTNode *Parser::parse_expression(bool silent_mode,
 
 		ASTNode *op = parse_binary_operator();
 		ASTNode *right = NULL;
+		assert(op);
 
 		int next_minimum_precedence;
 		if (associativity == POperator::RIGHT_ASSOC)
@@ -406,16 +417,13 @@ ASTNode *Parser::parse_expression(bool silent_mode,
 		else if (associativity == POperator::LEFT_ASSOC)
 			next_minimum_precedence = precedence + 1;
 		else {
-			if (!silent_mode)
-				set_error("expected operator with associativity");
+			set_error("expected operator with associativity");
 			return NULL;
 		}
 
-		right = parse_expression(silent_mode, next_minimum_precedence);
-
+		right = parse_expression(next_minimum_precedence);
 		if (!right) {
-			if (!silent_mode)
-				set_error("expected expression after operator");
+			set_error("expected expression after operator");
 			return NULL;
 		}
 
@@ -432,6 +440,10 @@ ASTNode *Parser::parse_variable_declaration() {
 
 	if (!scan_token(TOKEN_KEYWORD, "let")) {
 		ASTNode *type = parse_type();
+		// TODO: We need some way to have errors chain together. For
+		// example, if 'parse_type' called 'set_error' in this case, then
+		// we probably want to display that error along with any additional
+		// errors that we want to tack on.
 		if (!type) {
 			set_error("invalid type in variable declaration");
 			return NULL;
@@ -452,6 +464,8 @@ ASTNode *Parser::parse_variable_declaration() {
 	// Handle assignment after declaration syntax (i.e. 'int32 a = 5')
 	if (scan_token(TOKEN_OPERATOR, "=")) {
 		result->toVariableDeclaration()->init = parse_expression();
+		if (!result->toVariableDeclaration()->init)
+			return NULL;
 	}
 
 	return result;
@@ -523,13 +537,20 @@ ASTNode *Parser::parse_function() {
 		return NULL;
 	}
 
-	if (!scan_token(TOKEN_OPERATOR, "->")
-	 || !(signature->toFunctionSignature()->type
-	      = parse_type()->toType()->value).base_type)
-	{
-		set_error("expected type in function signature");
+	if (!scan_token(TOKEN_OPERATOR, "->")) {
+		set_error("expected '->' return specifier in function signature");
 		return NULL;
 	}
+
+	// NOTE: We used to check if the type's 'base_type' was NULL here,
+	// but I don't think it's necessary as I believe 'parse_type' handles
+	// this case.
+	ASTNode *return_type = parse_type();
+	if (!return_type) {
+		set_error("invalid return type in function signature");
+		return NULL;
+	}
+	signature->toFunctionSignature()->type = return_type->toType()->value.base_type;
 
 	if (!peek_token(TOKEN_RESERVED_PUNCTUATION, "{")) {
 		env = prev_env;
@@ -607,7 +628,7 @@ ASTNode *Parser::parse_return() {
 	}
 
 	ASTNode *result = create_node(NODE_RETURN);
-	result->toUnaryOperator()->operand = parse_expression(true);
+	result->toUnaryOperator()->operand = parse_expression();
 	if (!result->toUnaryOperator()->operand)
 		set_error("expected expression following 'return' keyword\n");
 
