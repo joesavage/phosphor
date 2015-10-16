@@ -25,20 +25,24 @@ private:
 	bool eof(int offset = 0);
 	bool peek_token_type(PTokenType type, int offset = 0);
 	bool peek_token(PTokenType type, const char *value, int offset = 0);
-	bool peek_type(int offset = 0);
-	bool peek_unary_operator();
-	bool peek_binary_operator();
 	ASTNode *create_node(ASTNodeType type);
 	PToken *scan_token(PTokenType type, const char *value);
 	PToken *scan_token_type(PTokenType type);
 	PToken *scan_end_of_line();
 	void set_error(const char *format, ...);
 
+	// TODO: peek_constant, peek_identifier
+	bool peek_constant();
 	ASTNode *parse_constant();
+	bool peek_identifier();
 	ASTNode *parse_identifier();
+	bool peek_type(int offset = 0);
 	ASTNode *parse_type();
+	bool peek_unary_operator();
 	ASTNode *parse_unary_operator();
+	bool peek_binary_operator();
 	ASTNode *parse_binary_operator();
+
 	ASTNode *parse_unary_operators();
 	ASTNode *parse_atom();
 	ASTNode *parse_expression(unsigned char

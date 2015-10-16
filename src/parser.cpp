@@ -10,11 +10,6 @@
 #include "parser.h"
 #include "helpers.h"
 
-// TODO: We need to deal with the ambiguity of whether 'parse_' functions
-// can result in a half-parsed mess state or not (and, thus, whether we
-// can call a particular 'parse_' function to just check whether something
-// will parse, or whether that's awaiting a half-parsed disaster).
-
 void Parser::set_error(const char *format, ...) {
 	free(error);
 
@@ -85,6 +80,12 @@ PToken *Parser::scan_end_of_line() {
 	return NULL;
 }
 
+bool Parser::peek_constant() {
+	return peek_token_type(TOKEN_INT) || peek_token_type(TOKEN_FLOAT)
+	    || peek_token_type(TOKEN_STRING) || peek_token(TOKEN_KEYWORD, "true")
+	    || peek_token(TOKEN_KEYWORD, "false");
+}
+
 ASTNode *Parser::parse_constant() {
 	ASTNode *result = NULL;
 
@@ -148,6 +149,10 @@ ASTNode *Parser::parse_constant() {
 	return result;
 }
 
+bool Parser::peek_identifier() {
+	return peek_token_type(TOKEN_IDENTIFIER);
+}
+
 ASTNode *Parser::parse_identifier() {
 	ASTNode *result = NULL;
 
@@ -158,6 +163,11 @@ ASTNode *Parser::parse_identifier() {
 	}
 
 	return result;
+}
+
+bool Parser::peek_type(int offset) {
+	return peek_token_type(TOKEN_IDENTIFIER, offset)
+	    && search_for_type(*env, cursor[offset].value) != NULL;
 }
 
 ASTNode *Parser::parse_type() {
@@ -220,23 +230,6 @@ ASTNode *Parser::parse_type() {
 	return result;
 }
 
-bool Parser::peek_type(int offset) {
-	return peek_token_type(TOKEN_IDENTIFIER, offset)
-	    && search_for_type(*env, cursor[offset].value) != NULL;
-}
-
-bool Parser::peek_unary_operator() {
-	return (peek_token_type(TOKEN_OPERATOR)
-		  && unary_operators[cursor[0].value])
-	    || (peek_token(TOKEN_RESERVED_PUNCTUATION, "(")
-	    && peek_type(1));
-}
-
-bool Parser::peek_binary_operator() {
-	return peek_token_type(TOKEN_OPERATOR)
-	    && binary_operators[cursor[0].value];
-}
-
 ASTNode *Parser::create_node(ASTNodeType type) {
 	ASTNode *result = (ASTNode *)nodes.reserve(sizeof(ASTNode));
 	result->initialise(type);
@@ -245,6 +238,13 @@ ASTNode *Parser::create_node(ASTNodeType type) {
 		result->col_no = cursor->col_no;
 	}
 	return result;
+}
+
+bool Parser::peek_unary_operator() {
+	return (peek_token_type(TOKEN_OPERATOR)
+		  && unary_operators[cursor[0].value])
+	    || (peek_token(TOKEN_RESERVED_PUNCTUATION, "(")
+	    && peek_type(1));
 }
 
 ASTNode *Parser::parse_unary_operator() {
@@ -266,6 +266,11 @@ ASTNode *Parser::parse_unary_operator() {
 	}
 
 	return result;
+}
+
+bool Parser::peek_binary_operator() {
+	return peek_token_type(TOKEN_OPERATOR)
+	    && binary_operators[cursor[0].value];
 }
 
 ASTNode *Parser::parse_binary_operator() {
@@ -290,6 +295,7 @@ ASTNode *Parser::parse_unary_operators() {
 	while (peek_unary_operator())
 	{
 		op = parse_unary_operator();
+		assert(op);
 
 		if (!result) {
 			result = last_op = op;
@@ -307,7 +313,15 @@ ASTNode *Parser::parse_unary_operators() {
 
 ASTNode *Parser::parse_atom() {
 	// TODO: What about postfix unary operators?
-	ASTNode *result = parse_unary_operators();
+	ASTNode *result = NULL;
+	if (peek_unary_operator()) {
+		result = parse_unary_operators();
+		if (!result) {
+			if (!error)
+				set_error("failed to parse unary operators");
+			return NULL;
+		}
+	}
 
 	// Fix for multiple unary operators. Ideally, this would get returned from
 	// 'parse_unary_operators' instead (multiple return values or whatever).
@@ -328,7 +342,7 @@ ASTNode *Parser::parse_atom() {
 
 	ASTNode *&term = result ? (last_op->type == NODE_CAST_OPERATOR ? last_op->toCastOperator()->operand : last_op->toUnaryOperator()->operand) : result;
 
-	if (peek_token_type(TOKEN_IDENTIFIER)) {
+	if (peek_identifier()) {
 		term = parse_identifier();
 		assert(term);
 		if (scan_token(TOKEN_RESERVED_PUNCTUATION, "(")) {
@@ -338,7 +352,8 @@ ASTNode *Parser::parse_atom() {
 				do {
 					ASTNode *arg = parse_expression();
 					if (!arg) {
-						set_error("invalid function argument");
+						if (!error)
+							set_error("invalid function argument");
 						return NULL;
 					}
 					call->toFunctionCall()->args.add(arg);
@@ -357,13 +372,25 @@ ASTNode *Parser::parse_atom() {
 		}
 	}
 
-	if ((term = parse_constant()))
+	if (peek_constant()) {
+		term = parse_constant();
+		assert(term);
 		return result;
+	}
 
-	if (scan_token(TOKEN_RESERVED_PUNCTUATION, "(")
-	    && (term = parse_expression())
-	    && scan_token(TOKEN_RESERVED_PUNCTUATION, ")"))
+	if (scan_token(TOKEN_RESERVED_PUNCTUATION, "(")) {
+		term = parse_expression();
+		if (!term) {
+			if (!error)
+				set_error("expected expression within brackets");
+			return NULL;
+		}
+		if (!scan_token(TOKEN_RESERVED_PUNCTUATION, ")")) {
+			set_error("expected closing bracket");
+			return NULL;
+		}
 		return result;
+	}
 
 	if (result)
 		set_error("expected symbol following unary operator");
@@ -374,8 +401,11 @@ ASTNode *Parser::parse_atom() {
 ASTNode *Parser::parse_expression(unsigned char minimum_precedence)
 {
 	ASTNode *result = parse_atom();
-	if (!result || error)
+	if (!result || error) {
+		if (!error)
+			set_error("failed to parse atom in expression");
 		return NULL;
+	}
 
 	// TODO: Ternary operators need to be handled as a special case here!
 
@@ -383,18 +413,23 @@ ASTNode *Parser::parse_expression(unsigned char minimum_precedence)
 	// precedence - it needs to be part of the 'atom'.
 	// Parse array accesses
 	ASTNode *array_index = NULL;
-	if (scan_token(TOKEN_RESERVED_PUNCTUATION, "[")
-	    && (array_index = parse_atom())
-	    && scan_token(TOKEN_RESERVED_PUNCTUATION, "]"))
-	{
+	if (scan_token(TOKEN_RESERVED_PUNCTUATION, "[")) {
+		array_index = parse_atom();
+		if (!array_index) {
+			if (!error)
+				set_error("expected expression for array index");
+			return NULL;
+		}
+		if (!scan_token(TOKEN_RESERVED_PUNCTUATION, "]")) {
+			set_error("expected closing bracket for array index");
+			return NULL;
+		}
 		ASTNode *array_access = create_node(NODE_BINARY_OPERATOR);
 		array_access->toBinaryOperator()->value = "[]";
 		array_access->toBinaryOperator()->left = result;
 		array_access->toBinaryOperator()->right = array_index;
 		result = array_access;
 	}
-	if (error)
-		return NULL;
 		
 
 	POperator operator_properties;
@@ -423,7 +458,8 @@ ASTNode *Parser::parse_expression(unsigned char minimum_precedence)
 
 		right = parse_expression(next_minimum_precedence);
 		if (!right) {
-			set_error("expected expression after operator");
+			if (!error)
+				set_error("expected expression after operator");
 			return NULL;
 		}
 
@@ -445,7 +481,8 @@ ASTNode *Parser::parse_variable_declaration() {
 		// we probably want to display that error along with any additional
 		// errors that we want to tack on.
 		if (!type) {
-			set_error("invalid type in variable declaration");
+			if (!error)
+				set_error("invalid type in variable declaration");
 			return NULL;
 		}
 		result->toVariableDeclaration()->type = type->toType()->value;
@@ -456,16 +493,21 @@ ASTNode *Parser::parse_variable_declaration() {
 	if (peek_token_type(TOKEN_KEYWORD)) {
 		set_error("cannot declare variable with reserved keyword name");
 		return NULL;
-	} else if (!(result->toVariableDeclaration()->name = parse_identifier())) {
+	} else if (!peek_identifier()) {
 		set_error("expected identifier for variable declaration");
 		return NULL;
 	}
+	result->toVariableDeclaration()->name = parse_identifier();
+	assert(result->toVariableDeclaration()->name);
 
 	// Handle assignment after declaration syntax (i.e. 'int32 a = 5')
 	if (scan_token(TOKEN_OPERATOR, "=")) {
 		result->toVariableDeclaration()->init = parse_expression();
-		if (!result->toVariableDeclaration()->init)
+		if (!result->toVariableDeclaration()->init) {
+			if (!error)
+				set_error("invalid expression for assignment");
 			return NULL;
+		}
 	}
 
 	return result;
@@ -483,8 +525,11 @@ ASTNode *Parser::parse_block() {
 	env = result->toBlock()->env;
 
 	result->toBlock()->statements = parse_statements();
-	if (!result->toBlock()->statements || error)
+	if (!result->toBlock()->statements || error) {
+		if (!error)
+			set_error("failed to parse statements in block");
 		return NULL;
+	}
 
 	if (!scan_token(TOKEN_RESERVED_PUNCTUATION, "}")) {
 		set_error("unexpected symbol in block - '%s'", cursor[0].value);
@@ -502,11 +547,12 @@ ASTNode *Parser::parse_function() {
 
 	ASTNode *signature = create_node(NODE_FUNCTION_SIGNATURE);
 
-	ASTNode *identifier = parse_identifier();
-	if (!identifier) {
+	if (!peek_identifier()) {
 		set_error("expected identifier for function signature");
 		return NULL;
 	}
+	ASTNode *identifier = parse_identifier();
+	assert(identifier);
 	signature->toFunctionSignature()->name = identifier;
 
 	// TODO: When we support function overloading, we need to change this line.
@@ -525,7 +571,8 @@ ASTNode *Parser::parse_function() {
 		do {
 			ASTNode *arg = parse_variable_declaration();
 			if (!arg) {
-				set_error("invalid variable declaration in function parameter list");
+				if (!error)
+					set_error("invalid variable declaration in function parameter list");
 				return NULL;
 			}
 			signature->toFunctionSignature()->args.add(arg);
@@ -545,9 +592,13 @@ ASTNode *Parser::parse_function() {
 	// NOTE: We used to check if the type's 'base_type' was NULL here,
 	// but I don't think it's necessary as I believe 'parse_type' handles
 	// this case.
-	ASTNode *return_type = parse_type();
-	if (!return_type) {
-		set_error("invalid return type in function signature");
+	ASTNode *return_type;
+	if (!peek_type()) {
+		set_error("expected return type in function signature");
+		return NULL;
+	} else if (!(return_type = parse_type())) {
+		if (!error)
+			set_error("invalid return type in function signature");
 		return NULL;
 	}
 	signature->toFunctionSignature()->type = return_type->toType()->value.base_type;
@@ -561,8 +612,11 @@ ASTNode *Parser::parse_function() {
 		if (!function->toFunction()->signature || error)
 			return NULL;
 		function->toFunction()->body = parse_block();
-		if (!function->toFunction()->body || error)
+		if (!function->toFunction()->body || error) {
+			if (!error)
+				set_error("failed to parse function block");
 			return NULL;
+		}
 		env = prev_env;
 		return function;
 	}
@@ -579,11 +633,17 @@ ASTNode *Parser::parse_if() {
 
 	ASTNode *result = create_node(NODE_IF);
 	result->toConditional()->condition = parse_expression();
-	if (!result->toConditional()->condition || error)
+	if (!result->toConditional()->condition || error) {
+		if (!error)
+			set_error("failed to parse expression in if statement");
 		return NULL;
+	}
 	result->toConditional()->then = parse_block();
-	if (!result->toConditional()->then || error)
+	if (!result->toConditional()->then || error) {
+		if (!error)
+			set_error("failed to parse block for if statement");
 		return NULL;
+	}
 
 	if (scan_token(TOKEN_KEYWORD, "else")) {
 		if (peek_token(TOKEN_KEYWORD, "if"))
@@ -591,8 +651,11 @@ ASTNode *Parser::parse_if() {
 		else
 			result->toConditional()->otherwise = parse_block();
 
-		if (!result->toConditional()->otherwise || error)
+		if (!result->toConditional()->otherwise || error) {
+			if (!error)
+				set_error("failed to parse 'else' / 'else if' after if statement");
 			return NULL;
+		}
 	}
 
 	return result;
@@ -606,16 +669,25 @@ ASTNode *Parser::parse_while() {
 
 	ASTNode *result = create_node(NODE_WHILE_LOOP);
 	result->toConditional()->condition = parse_expression();
-	if (!result->toConditional()->condition || error)
+	if (!result->toConditional()->condition || error) {
+		if (!error)
+			set_error("failed to parse expression in while loop");
 		return NULL;
+	}
 	result->toConditional()->then = parse_block();
-	if (!result->toConditional()->then || error)
+	if (!result->toConditional()->then || error) {
+		if (!error)
+			set_error("failed to parse block in while loop");
 		return NULL;
+	}
 
 	if (scan_token(TOKEN_KEYWORD, "else")) {
 		result->toConditional()->otherwise = parse_block();
-		if (!result->toConditional()->otherwise || error)
+		if (!result->toConditional()->otherwise || error) {
+			if (!error)
+				set_error("failed to parse block for 'else' in while loop");
 			return NULL;
+		}
 	}
 
 	return result;
@@ -629,8 +701,11 @@ ASTNode *Parser::parse_return() {
 
 	ASTNode *result = create_node(NODE_RETURN);
 	result->toUnaryOperator()->operand = parse_expression();
-	if (!result->toUnaryOperator()->operand)
-		set_error("expected expression following 'return' keyword\n");
+	if (!result->toUnaryOperator()->operand) {
+		if (!error)
+			set_error("expected expression following 'return' keyword\n");
+		return NULL;
+	}
 
 	return result;
 }
@@ -652,7 +727,12 @@ ASTNode *Parser::parse_statement() {
 	}
 	// ... etc ...
 
-	return parse_expression();
+	if (peek_unary_operator() || peek_identifier() || peek_constant() ||
+	    scan_token(TOKEN_RESERVED_PUNCTUATION, "(")) {
+		return parse_expression();
+	}
+
+	return NULL;
 }
 
 ASTNode *Parser::parse_statements() {
