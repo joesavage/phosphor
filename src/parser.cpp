@@ -722,7 +722,8 @@ ASTNode *Parser::parse_statement() {
 		return parse_while();
 	} else if (peek_token(TOKEN_KEYWORD, "return")) {
 		return parse_return();
-	} else if (peek_token(TOKEN_RESERVED_PUNCTUATION, "{")) {
+	} else if (peek_token(TOKEN_RESERVED_PUNCTUATION, "{") &&
+	           env->parent != NULL) {
 		return parse_block();
 	}
 	// ... etc ...
