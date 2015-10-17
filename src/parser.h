@@ -31,7 +31,6 @@ private:
 	PToken *scan_end_of_line();
 	void set_error(const char *format, ...);
 
-	// TODO: peek_constant, peek_identifier
 	bool peek_constant();
 	ASTNode *parse_constant();
 	bool peek_identifier();

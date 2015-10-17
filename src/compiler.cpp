@@ -348,7 +348,6 @@ int main(int argc, char *argv[]) {
 			fatal_error("Codegen error: %s\n", generator.error);
 	}
 
-	// TODO: Set filename and debug level in CLI flags.
 	module->dump();
 	write_module_to_file(module, output_filename);
 

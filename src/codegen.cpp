@@ -86,8 +86,6 @@ bool CodeGenerator::implicit_type_convert(PValue *source,
 		return false;
 
 	if (source_base->is_numeric && dest_base->is_numeric) {
-		// TODO: Consider whether integer to float implicit conversion is a good
-		// idea or not.
 		// TODO: This big unwieldy condition can probably be simplified down!
 		if ((((source_base->is_signed == dest_base->is_signed
 		 && (!source_base->is_float))
@@ -97,7 +95,6 @@ bool CodeGenerator::implicit_type_convert(PValue *source,
 
 		 // NOTE: unsigned->signed conversions are allowed if there is no possible
 		 // truncation. implicit signed->unsigned conversions are disallowed.
-		 // TODO: Should we be more relaxed with this check? I'm unsure.
 		 || ((!source_base->is_signed && dest_base->is_signed)
 		 && (dest_base->numbits - 1 >= source_base->numbits))) {
 			// We could easily create the cast instructions manually rather than
@@ -189,7 +186,9 @@ PVariable CodeGenerator::generate_lvalue(ASTNode *node) {
 				} else { // Type inference
 					// TODO: Maybe we want to do something with the type here.
 					// If we're using an 8-bit int literal, for example, we might want
-					// to actually declare the variable as 32-bits in size.
+					// to actually declare the variable as 32-bits in size. Also,
+					// what if there's a '-' operator right before this literal? Then
+					// we should want this to become a signed type!
 					result.type = value.type;
 				}
 			}
@@ -269,7 +268,6 @@ PVariable CodeGenerator::generate_lvalue(ASTNode *node) {
 			set_error(node, "unsupported binary operator '%s' for generating lvalue", pnode.value);
 			break;
 		}
-		// TODO: NODE_BINARY_OPERATOR FOR '[]'
 		default:
 			set_error(node, "failed to generate variable for ASTNode");
 			break;
@@ -360,6 +358,7 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 				}
 			} else {
 				// TODO: Ensure these binop cast rules are sensible at some point.
+				// We could always just try casing both instead of doing this check.
 				bool cast_left = (!left_base_type->is_signed && right_base_type->is_signed)
 				              || (left_base_type->numbits < right_base_type->numbits)
 				              || (right_base_type->is_float);
@@ -592,7 +591,7 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 			if (error)
 				break;
 
-			// TODO: This fails for a function that returns 'void' (you can't)
+			// TODO: This fails for a function that returns 'void' - you can't
 			// assign names (e.g. 'calltmp') to 'void' values (for obvious
 			// reasons).
 			result.type = pfunction->return_type;
@@ -604,7 +603,6 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 		}
 		case NODE_CONSTANT_INT:
 		{
-			// TODO: Need to deal with hex, etc.
 			auto pnode = *node->toInteger();
 			size_t value = pnode.value;
 

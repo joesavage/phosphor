@@ -194,7 +194,9 @@ ASTNode *Parser::parse_type() {
 			return NULL;
 		}
 
-		// TODO: Review whether using 'atoi' is a good idea or not
+		// TODO: Switch from 'atoi' to 'strtol' by factoring out previously
+		// used 'strtol' code into a nice little function for parsing
+		// numbers of multiple bases. ('int32 arr[0x10];' should be valid!)
 		int array_size = atoi(array_size_node->value);
 		if (!array_size) {
 			set_error("attempted to create array type with invalid size");

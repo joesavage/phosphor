@@ -49,11 +49,11 @@ size_t MemoryList<T>::reserve(size_t length) {
 		while ((_cursor + length) >= _size || _cursor >= _size)
 			_size *= 2;
 
-		T *old__data = _data;
+		T *old_data = _data;
 		_data = (T *)heap_alloc(_size);
-		if (old__data) {
-			memcpy((void *)_data, old__data, old_size);
-			::free(old__data);
+		if (old_data) {
+			memcpy((void *)_data, old_data, old_size);
+			::free(old_data);
 		}
 	}
 
@@ -63,7 +63,6 @@ size_t MemoryList<T>::reserve(size_t length) {
 	size_t destination = _cursor;
 	_cursor += length;
 
-	// TODO: This mix of T-rel and byte-rel units is REALLY DUMB!
 	return destination / sizeof(T);
 }
 
@@ -83,6 +82,9 @@ template <typename T>
 T *MemoryList<T>::getPointer(size_t index) {
 	if (!_data)
 		return NULL;
+
+	// NOTE: These pointers shouldn't be stored too widely or held for
+	// too long as they can expire on 'reserve' (e.g. from 'add').
 	return (_data + index);
 }
 
