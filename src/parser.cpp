@@ -94,36 +94,9 @@ ASTNode *Parser::parse_constant() {
 	if ((token = scan_token_type(TOKEN_INT))) {
 		result = create_node(NODE_CONSTANT_INT);
 
-		int base = 10;
-		if (token->value[0] == '0' && is_radix_prefix(token->value[1])) {
-			++token->value;
-			switch (token->value[0]) {
-				case 'x':
-					base = 16;
-					break;
-				case 'o':
-					base = 8;
-					break;
-				case 'b':
-					base = 2;
-					break;
-				default:
-					set_error("INTERNAL COMPILER ERROR: bad numeric prefix from lexer");
-					return NULL;
-			}
-			++token->value;
-		}
-
-		errno = 0;
-		char *endptr = token->value;
-		result->toInteger()->value = strtol(token->value, &endptr, base);
-		assert(sizeof(result->toInteger()->value) >= 8);
-		if (errno == ERANGE) {
-			set_error("failed to parse out of range number");
-			return NULL;
-		} else if (errno != 0
-			|| (size_t)(endptr - token->value) < strlen(token->value)) {
-			set_error("failed to parse number with base %d", base);
+		if (str_to_size_t(token->value, &result->toInteger()->value)) {
+			if (!error)
+				set_error("Failed to parse numeric constant.");
 			return NULL;
 		}
 	} else if ((token = scan_token_type(TOKEN_FLOAT))) {
@@ -165,6 +138,42 @@ ASTNode *Parser::parse_identifier() {
 	return result;
 }
 
+int Parser::str_to_size_t(char *str, size_t *result) {
+	int base = 10;
+	if (str[0] == '0' && is_radix_prefix(str[1])) {
+		++str;
+		switch (str[0]) {
+			case 'x':
+				base = 16;
+				break;
+			case 'o':
+				base = 8;
+				break;
+			case 'b':
+				base = 2;
+				break;
+			default:
+				set_error("INTERNAL COMPILER ERROR: bad numeric prefix from lexer");
+				return -1;
+		}
+		++str;
+	}
+
+	errno = 0;
+	char *endptr = str;
+	*result = strtol(str, &endptr, base);
+	if (errno == ERANGE) {
+		set_error("failed to parse out of range number");
+		return -1;
+	} else if (errno != 0
+		|| (size_t)(endptr - str) < strlen(str)) {
+		set_error("failed to parse number with base %d", base);
+		return -1;
+	}
+
+	return 0;
+}
+
 bool Parser::peek_type(int offset) {
 	return peek_token_type(TOKEN_IDENTIFIER, offset)
 	    && search_for_type(*env, cursor[offset].value) != NULL;
@@ -194,12 +203,10 @@ ASTNode *Parser::parse_type() {
 			return NULL;
 		}
 
-		// TODO: Switch from 'atoi' to 'strtol' by factoring out previously
-		// used 'strtol' code into a nice little function for parsing
-		// numbers of multiple bases. ('int32 arr[0x10];' should be valid!)
-		int array_size = atoi(array_size_node->value);
-		if (!array_size) {
-			set_error("attempted to create array type with invalid size");
+		size_t array_size;
+		if (str_to_size_t(array_size_node->value, &array_size)) {
+			if (!error)
+				set_error("attempted to create array type with invalid size");
 			return NULL;
 		}
 

@@ -2,7 +2,7 @@ fn putchar(int32 ch) -> int32;
 fn puts(uint8^ ch) -> int32;
 
 fn main() -> int32 {
-	uint8[5] message;
+	uint8[0b00000101] message;
 	message[0] = 72;
 	message[1] = 0x65;
 	message[2] = 0o171;
