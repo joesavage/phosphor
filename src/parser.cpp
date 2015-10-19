@@ -208,6 +208,9 @@ ASTNode *Parser::parse_type() {
 			if (!error)
 				set_error("attempted to create array type with invalid size");
 			return NULL;
+		} else if (!array_size) {
+			set_error("cannot create an array with size zero");
+			return NULL;
 		}
 
 		if (!scan_token(TOKEN_RESERVED_PUNCTUATION, "]")) {
