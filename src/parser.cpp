@@ -46,6 +46,10 @@ bool Parser::eof(int offset) {
 	return (cursor + offset) >= (tokens + token_count);
 }
 
+bool Parser::safe(int offset) {
+	return (cursor + offset) < tokens && !eof(offset);
+}
+
 bool Parser::peek_token_type(PTokenType type, int offset) {
 	return !eof(offset) && cursor[offset].type == type;
 }
@@ -66,18 +70,13 @@ PToken *Parser::scan_token(PTokenType type, const char *value) {
 	return NULL;
 }
 
-PToken *Parser::scan_end_of_line() {
-	// TODO: In future, accept newlines instead of strictly requiring
-	// semicolons. Right now though, the parser doesn't know how to handle
-	// whitespace (inc. newlines).
-	// ALSO: We might run into problems where we didn't expect the parser
-	// to care about newlines where we now do. e.g. using newlines in
-	// place of semicolons could result in a function with the brace being
-	// put on the next line rather than the current line being parsed
-	// incorrectly.
-	if (peek_token(TOKEN_RESERVED_PUNCTUATION, ";"))
-		return cursor++;
-	return NULL;
+bool Parser::scan_end_of_line() {
+	if (peek_token(TOKEN_RESERVED_PUNCTUATION, ";")) {
+		++cursor;
+		return true;
+	}
+
+	return eof() || (!safe(-1) && cursor[-1].line_no < cursor[0].line_no);
 }
 
 bool Parser::peek_constant() {

@@ -184,7 +184,7 @@ int main(int argc, char *argv[]) {
 	Parser parser = {};
 	CodeGenerator generator = {};
 
-	MemoryArena transient_memory(2097152); // TODO: Evaluate this initial size
+	MemoryArena transient_memory(2097152);
 	lexer.memory = &transient_memory;
 	parser.memory = &transient_memory;
 	generator.memory = &transient_memory;

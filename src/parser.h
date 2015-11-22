@@ -23,12 +23,13 @@ private:
 	                     Environment *parent,
 	                     char *current_function = NULL);
 	bool eof(int offset = 0);
+	bool safe(int offset = 0);
 	bool peek_token_type(PTokenType type, int offset = 0);
 	bool peek_token(PTokenType type, const char *value, int offset = 0);
 	ASTNode *create_node(ASTNodeType type);
 	PToken *scan_token(PTokenType type, const char *value);
 	PToken *scan_token_type(PTokenType type);
-	PToken *scan_end_of_line();
+	bool scan_end_of_line();
 	void set_error(const char *format, ...);
 
 	int str_to_size_t(char *str, size_t *result);
