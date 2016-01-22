@@ -13,6 +13,7 @@ void ASTNode::initialise(ASTNodeType type) {
 			toBlock()->statements = NULL;
 			toBlock()->env = NULL;
 			break;
+		case NODE_CONSTANT_DECLARATION:
 		case NODE_VARIABLE_DECLARATION:
 			toVariableDeclaration()->type = PType();
 			toVariableDeclaration()->name = NULL;
@@ -109,7 +110,8 @@ struct ASTNode::data::block *ASTNode::toBlock() {
 	return &this->data.block;
 }
 struct ASTNode::data::variable_declaration *ASTNode::toVariableDeclaration() {
-	assert(type == NODE_VARIABLE_DECLARATION);
+	assert(type == NODE_VARIABLE_DECLARATION
+	    || type == NODE_CONSTANT_DECLARATION);
 	return &this->data.variable_declaration;
 }
 struct ASTNode::data::conditional *ASTNode::toConditional() {

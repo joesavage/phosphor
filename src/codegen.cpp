@@ -679,7 +679,7 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 	return result;
 }
 
-PFunction CodeGenerator::generate_function(ASTNode *node) {
+PFunction CodeGenerator::generate_function(ASTNode *node, char *name) {
 	PFunction result;
 
 	switch (node->type) {
@@ -701,7 +701,8 @@ PFunction CodeGenerator::generate_function(ASTNode *node) {
 			if (error)
 				break;
 
-			char *function_name = pnode.name->toString()->value;
+			char *function_name = name; // pnode.name->toString()->value;
+			assert(function_name);
 			PType type = pnode.type;
 			FunctionType *function_type;
 			Function *function;
@@ -768,7 +769,7 @@ PFunction CodeGenerator::generate_function(ASTNode *node) {
 		case NODE_FUNCTION:
 		{
 			auto pnode = *node->toFunction();
-			PFunction function = generate_function(pnode.signature);
+			PFunction function = generate_function(pnode.signature, name);
 			if (error)
 				break;
 
@@ -846,10 +847,20 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 		case NODE_BINARY_OPERATOR:
 			generate_rvalue(node);
 			break;
-		case NODE_FUNCTION_SIGNATURE:
-		case NODE_FUNCTION:
-			generate_function(node);
+		case NODE_CONSTANT_DECLARATION:
+		{
+			auto pnode = *node->toVariableDeclaration();
+			assert(pnode.init);
+			switch (pnode.init->type) {
+				case NODE_FUNCTION_SIGNATURE:
+				case NODE_FUNCTION:
+					generate_function(pnode.init, pnode.name->toString()->value);
+					break;
+				default:
+					set_error(pnode.init, "This type of constant declaration is not yet supported.");
+			}
 			break;
+		}
 		case NODE_FUNCTION_CALL:
 			generate_rvalue(node);
 			break;

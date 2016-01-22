@@ -351,7 +351,10 @@ ASTNode *Parser::parse_atom() {
 		}
 	}
 
-	ASTNode *&term = result ? (last_op->type == NODE_CAST_OPERATOR ? last_op->toCastOperator()->operand : last_op->toUnaryOperator()->operand) : result;
+	ASTNode *&term = result ? (last_op->type == NODE_CAST_OPERATOR
+	                            ? last_op->toCastOperator()->operand
+	                            : last_op->toUnaryOperator()->operand)
+	                        : result;
 
 	if (peek_identifier()) {
 		term = parse_identifier();
@@ -482,9 +485,52 @@ ASTNode *Parser::parse_expression(unsigned char minimum_precedence)
 	return result;
 }
 
+bool Parser::peek_constant_declaration() {
+	return peek_identifier() && peek_token(TOKEN_OPERATOR, "::", 1);
+}
+
+// Merge with 'parse_variable_declaration' when functions are first-class?
+ASTNode *Parser::parse_constant_declaration() {
+	ASTNode *result = create_node(NODE_CONSTANT_DECLARATION);
+
+	if (peek_token_type(TOKEN_KEYWORD)) {
+		set_error("cannot declare constant with reserved keyword name");
+		return NULL;
+	} else if (!peek_identifier()) {
+		set_error("expected identifier for constant declaration");
+		return NULL;
+	}
+	result->toVariableDeclaration()->name = parse_identifier();
+	assert(result->toVariableDeclaration()->name);
+
+	if (!scan_token(TOKEN_OPERATOR, "::")) {
+		set_error("expected '::' in constant declaration");
+		return NULL;
+	}
+
+	if (peek_function()) {
+		// TODO: One day, functions will be first-class types and shouldn't need to
+		// be treated significantly differently (until codegen).
+		if (env->parent != NULL) {
+			set_error("functions can only be defined in the global scope");
+			return NULL;
+		}
+		result->toVariableDeclaration()->init = parse_function(result->toVariableDeclaration()->name->toString()->value);
+	} else {
+		result->toVariableDeclaration()->init = parse_expression();
+	}
+	if (!result->toVariableDeclaration()->init) {
+		if (!error)
+			set_error("invalid expression for constant declaration");
+		return NULL;
+	}
+
+	return result;
+}
+
 bool Parser::peek_variable_declaration() {
 	return peek_identifier()
-	    && peek_token(TOKEN_RESERVED_PUNCTUATION, ":", 1)
+	    && peek_token(TOKEN_OPERATOR, ":", 1)
 	    && (peek_type(2) || peek_token(TOKEN_KEYWORD, "auto", 2));
 }
 
@@ -501,7 +547,7 @@ ASTNode *Parser::parse_variable_declaration() {
 	result->toVariableDeclaration()->name = parse_identifier();
 	assert(result->toVariableDeclaration()->name);
 
-	if (!scan_token(TOKEN_RESERVED_PUNCTUATION, ":")) {
+	if (!scan_token(TOKEN_OPERATOR, ":")) {
 		set_error("expected ':' in variable declaration");
 		return NULL;
 	}
@@ -530,6 +576,9 @@ ASTNode *Parser::parse_variable_declaration() {
 				set_error("invalid expression for assignment");
 			return NULL;
 		}
+	} else if (result->toVariableDeclaration()->type == NULL) {
+		set_error("expected initialisation for type inferred variable");
+		return NULL;
 	}
 
 	return result;
@@ -561,24 +610,39 @@ ASTNode *Parser::parse_block() {
 	return result;
 }
 
-ASTNode *Parser::parse_function() {
-	if (!scan_token(TOKEN_KEYWORD, "fn")) {
-		set_error("expected 'fn' for function signature");
-		return NULL;
+bool Parser::peek_function() {
+	if (!peek_token(TOKEN_RESERVED_PUNCTUATION, "("))
+		return false;
+
+	int offset = 1;
+	int nesting = 1;
+	while (nesting > 0) {
+		if (peek_token(TOKEN_RESERVED_PUNCTUATION, "(", offset))
+			++nesting;
+		else if (peek_token(TOKEN_RESERVED_PUNCTUATION, ")", offset))
+			--nesting;
+		else if (!peek_token_type(TOKEN_IDENTIFIER, offset) &&
+		         !peek_token_type(TOKEN_OPERATOR, offset))
+			return false;
+
+		++offset;
+		if (offset == INT_MAX || nesting == INT_MAX)
+			return false;
 	}
 
+	if (nesting < 0 || !peek_token(TOKEN_OPERATOR, "->", offset++))
+		return false;
+
+	if (!peek_type(offset))
+		return false;
+
+	return true;
+}
+
+ASTNode *Parser::parse_function(char *function_name) {
 	ASTNode *signature = create_node(NODE_FUNCTION_SIGNATURE);
 
-	if (!peek_identifier()) {
-		set_error("expected identifier for function signature");
-		return NULL;
-	}
-	ASTNode *identifier = parse_identifier();
-	assert(identifier);
-	signature->toFunctionSignature()->name = identifier;
-
-	// TODO: When we support function overloading, we need to change this line.
-	set_environment(signature, env, identifier->toString()->value);
+	set_environment(signature, env, function_name);
 
 	Environment *prev_env = env;
 	env = signature->toFunctionSignature()->env;
@@ -736,8 +800,8 @@ ASTNode *Parser::parse_return() {
 ASTNode *Parser::parse_statement() {
 	if (peek_variable_declaration()) {
 		return parse_variable_declaration();
-	} else if (peek_token(TOKEN_KEYWORD, "fn")) {
-		return parse_function();
+	} else if (peek_constant_declaration()) {
+		return parse_constant_declaration();
 	} else if (peek_token(TOKEN_KEYWORD, "if")) {
 		return parse_if();
 	} else if (peek_token(TOKEN_KEYWORD, "while")) {

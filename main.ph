@@ -1,7 +1,7 @@
-fn putchar(ch: int32) -> int32;
-fn puts(ch: uint8^) -> int32;
+putchar :: (ch: int32) -> int32;
+puts :: (ch: uint8^) -> int32;
 
-fn main() -> int32 {
+main :: () -> int32 {
 	message: uint8[0b101];
 	message[0] = 72;
 	message[1] = 0x65;

@@ -43,7 +43,6 @@ bool Lexer::peek_reserved_punctuation() {
 	    || cursor[0] == '{' || cursor[0] == '}'
 	    || cursor[0] == '[' || cursor[0] == ']'
 	    || cursor[0] == ';' || cursor[0] == '"'
-	    || cursor[0] == ':' || cursor[0] == '#'
 	    || cursor[0] == ',' || cursor[0] == '\'';
 }
 
