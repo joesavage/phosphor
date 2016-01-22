@@ -43,6 +43,7 @@ bool Lexer::peek_reserved_punctuation() {
 	    || cursor[0] == '{' || cursor[0] == '}'
 	    || cursor[0] == '[' || cursor[0] == ']'
 	    || cursor[0] == ';' || cursor[0] == '"'
+	    || cursor[0] == ':' || cursor[0] == '#'
 	    || cursor[0] == ',' || cursor[0] == '\'';
 }
 
@@ -130,7 +131,7 @@ bool Lexer::scan_word(PToken *token) {
 	const char *keywords[] = {
 		"if", "else", "true", "false", "break", "continue",
 		"do", "while", "until", "for",
-		"fn", "return", "let"
+		"fn", "return", "auto"
 	};
 	for (size_t i = 0; i < sizeof(keywords) / sizeof(keywords[0]); ++i) {
 		unsigned long length = (unsigned long)(cursor - begin);

@@ -10,6 +10,7 @@
  *     - Are default 'i32' etc. minimum-size or exact-size? Exact-size can be useful in structs, but minimum-size seems more useful for the general case.
  *   - Named parameters and named struct member initialization (and assignment?) would be nice.
  *   - Some good mechanisms for creating & handling parallelism would be nice, but I don't want to think about them quite yet.
+ *   - Better abstractions for SIMD than C (i.e. using intrinsics) would be good.
  *   - Some kind of variable immutability might be a good idea, but I have mixed feelings about how to implement this.
  *   - An easy way to switch from AoS to SoA would be great, but I'm unsure of the specifics. I don't want to think about it right now.
  *     - The compiler could implement this for static arrays (arrays of structs are secretly structs of arrays under the hood).

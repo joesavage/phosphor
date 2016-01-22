@@ -48,6 +48,7 @@ private:
 	ASTNode *parse_atom();
 	ASTNode *parse_expression(unsigned char
 	                          minimum_precedence = MINIMUM_PRECEDENCE);
+	bool peek_variable_declaration();
 	ASTNode *parse_variable_declaration();
 	ASTNode *parse_block();
 	ASTNode *parse_function();

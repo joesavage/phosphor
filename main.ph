@@ -1,15 +1,15 @@
-fn putchar(int32 ch) -> int32;
-fn puts(uint8^ ch) -> int32;
+fn putchar(ch: int32) -> int32;
+fn puts(ch: uint8^) -> int32;
 
 fn main() -> int32 {
-	uint8[0b101] message;
+	message: uint8[0b101];
 	message[0] = 72;
 	message[1] = 0x65;
 	message[2] = 0o171;
 	message[3] = 0b100001;
 	message[4] = 0;
 
-	int32 i = 0;
+	i: int32 = 0;
 	while i < 5 {
 		puts((uint8^)&message);
 		i = i + 1;

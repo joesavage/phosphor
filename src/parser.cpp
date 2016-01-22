@@ -482,10 +482,31 @@ ASTNode *Parser::parse_expression(unsigned char minimum_precedence)
 	return result;
 }
 
+bool Parser::peek_variable_declaration() {
+	return peek_identifier()
+	    && peek_token(TOKEN_RESERVED_PUNCTUATION, ":", 1)
+	    && (peek_type(2) || peek_token(TOKEN_KEYWORD, "auto", 2));
+}
+
 ASTNode *Parser::parse_variable_declaration() {
 	ASTNode *result = create_node(NODE_VARIABLE_DECLARATION);
 
-	if (!scan_token(TOKEN_KEYWORD, "let")) {
+	if (peek_token_type(TOKEN_KEYWORD)) {
+		set_error("cannot declare variable with reserved keyword name");
+		return NULL;
+	} else if (!peek_identifier()) {
+		set_error("expected identifier for variable declaration");
+		return NULL;
+	}
+	result->toVariableDeclaration()->name = parse_identifier();
+	assert(result->toVariableDeclaration()->name);
+
+	if (!scan_token(TOKEN_RESERVED_PUNCTUATION, ":")) {
+		set_error("expected ':' in variable declaration");
+		return NULL;
+	}
+
+	if (!scan_token(TOKEN_KEYWORD, "auto")) {
 		ASTNode *type = parse_type();
 		// TODO: We need some way to have errors chain together. For
 		// example, if 'parse_type' called 'set_error' in this case, then
@@ -500,16 +521,6 @@ ASTNode *Parser::parse_variable_declaration() {
 	} else {
 		result->toVariableDeclaration()->type = NULL;
 	}
-
-	if (peek_token_type(TOKEN_KEYWORD)) {
-		set_error("cannot declare variable with reserved keyword name");
-		return NULL;
-	} else if (!peek_identifier()) {
-		set_error("expected identifier for variable declaration");
-		return NULL;
-	}
-	result->toVariableDeclaration()->name = parse_identifier();
-	assert(result->toVariableDeclaration()->name);
 
 	// Handle assignment after declaration syntax (i.e. 'int32 a = 5')
 	if (scan_token(TOKEN_OPERATOR, "=")) {
@@ -723,7 +734,7 @@ ASTNode *Parser::parse_return() {
 
 // Predictive recursive descent parsing of a single statement
 ASTNode *Parser::parse_statement() {
-	if (peek_type() || peek_token(TOKEN_KEYWORD, "let")) {
+	if (peek_variable_declaration()) {
 		return parse_variable_declaration();
 	} else if (peek_token(TOKEN_KEYWORD, "fn")) {
 		return parse_function();
