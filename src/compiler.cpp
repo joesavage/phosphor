@@ -274,28 +274,28 @@ int main(int argc, char *argv[]) {
 
 	auto type_void = new ((PBaseType *)transient_memory.reserve(sizeof(PBaseType))) PBaseType("void", Type::getVoidTy(getGlobalContext()), 0);
 	auto type_bool = new ((PBaseType *)transient_memory.reserve(sizeof(PBaseType))) PBaseType("bool", Type::getInt1Ty(getGlobalContext()), 1);
-	auto type_int8 = new ((PBaseType *)transient_memory.reserve(sizeof(PBaseType))) PBaseType("int8", Type::getInt8Ty(getGlobalContext()), 8, true, false, true);
-	auto type_int16 = new ((PBaseType *)transient_memory.reserve(sizeof(PBaseType))) PBaseType("int16", Type::getInt16Ty(getGlobalContext()), 16, true, false, true);
-	auto type_int32 = new ((PBaseType *)transient_memory.reserve(sizeof(PBaseType))) PBaseType("int32", Type::getInt32Ty(getGlobalContext()), 32, true, false, true);
-	auto type_int64 = new ((PBaseType *)transient_memory.reserve(sizeof(PBaseType))) PBaseType("int64", Type::getInt64Ty(getGlobalContext()), 64, true, false, true);
-	auto type_uint8 = new ((PBaseType *)transient_memory.reserve(sizeof(PBaseType))) PBaseType("uint8", Type::getInt8Ty(getGlobalContext()), 8, true, false, false);
-	auto type_uint16 = new ((PBaseType *)transient_memory.reserve(sizeof(PBaseType))) PBaseType("uint16", Type::getInt16Ty(getGlobalContext()), 16, true, false, false);
-	auto type_uint32 = new ((PBaseType *)transient_memory.reserve(sizeof(PBaseType))) PBaseType("uint32", Type::getInt32Ty(getGlobalContext()), 32, true, false, false);
-	auto type_uint64 = new ((PBaseType *)transient_memory.reserve(sizeof(PBaseType))) PBaseType("uint64", Type::getInt64Ty(getGlobalContext()), 64, true, false, false);
-	auto type_float32 = new ((PBaseType *)transient_memory.reserve(sizeof(PBaseType))) PBaseType("float32", Type::getFloatTy(getGlobalContext()), 32, true, true, true);
-	auto type_float64 = new ((PBaseType *)transient_memory.reserve(sizeof(PBaseType))) PBaseType("float64", Type::getDoubleTy(getGlobalContext()), 64, true, true, true);
+	auto type_i8 = new ((PBaseType *)transient_memory.reserve(sizeof(PBaseType))) PBaseType("i8", Type::getInt8Ty(getGlobalContext()), 8, true, false, true);
+	auto type_i16 = new ((PBaseType *)transient_memory.reserve(sizeof(PBaseType))) PBaseType("i16", Type::getInt16Ty(getGlobalContext()), 16, true, false, true);
+	auto type_i32 = new ((PBaseType *)transient_memory.reserve(sizeof(PBaseType))) PBaseType("i32", Type::getInt32Ty(getGlobalContext()), 32, true, false, true);
+	auto type_i64 = new ((PBaseType *)transient_memory.reserve(sizeof(PBaseType))) PBaseType("i64", Type::getInt64Ty(getGlobalContext()), 64, true, false, true);
+	auto type_u8 = new ((PBaseType *)transient_memory.reserve(sizeof(PBaseType))) PBaseType("u8", Type::getInt8Ty(getGlobalContext()), 8, true, false, false);
+	auto type_u16 = new ((PBaseType *)transient_memory.reserve(sizeof(PBaseType))) PBaseType("u16", Type::getInt16Ty(getGlobalContext()), 16, true, false, false);
+	auto type_u32 = new ((PBaseType *)transient_memory.reserve(sizeof(PBaseType))) PBaseType("u32", Type::getInt32Ty(getGlobalContext()), 32, true, false, false);
+	auto type_u64 = new ((PBaseType *)transient_memory.reserve(sizeof(PBaseType))) PBaseType("u64", Type::getInt64Ty(getGlobalContext()), 64, true, false, false);
+	auto type_f32 = new ((PBaseType *)transient_memory.reserve(sizeof(PBaseType))) PBaseType("f32", Type::getFloatTy(getGlobalContext()), 32, true, true, true);
+	auto type_f64 = new ((PBaseType *)transient_memory.reserve(sizeof(PBaseType))) PBaseType("f64", Type::getDoubleTy(getGlobalContext()), 64, true, true, true);
 	type_table.set(type_void->name, type_void);
 	type_table.set(type_bool->name, type_bool);
-	type_table.set(type_int8->name, type_int8);
-	type_table.set(type_int16->name, type_int16);
-	type_table.set(type_int32->name, type_int32);
-	type_table.set(type_int64->name, type_int64);
-	type_table.set(type_uint8->name, type_uint8);
-	type_table.set(type_uint16->name, type_uint16);
-	type_table.set(type_uint32->name, type_uint32);
-	type_table.set(type_uint64->name, type_uint64);
-	type_table.set(type_float32->name, type_float32);
-	type_table.set(type_float64->name, type_float64);
+	type_table.set(type_i8->name, type_i8);
+	type_table.set(type_i16->name, type_i16);
+	type_table.set(type_i32->name, type_i32);
+	type_table.set(type_i64->name, type_i64);
+	type_table.set(type_u8->name, type_u8);
+	type_table.set(type_u16->name, type_u16);
+	type_table.set(type_u32->name, type_u32);
+	type_table.set(type_u64->name, type_u64);
+	type_table.set(type_f32->name, type_f32);
+	type_table.set(type_f64->name, type_f64);
 	
 
 	// NOTE: A lot of the code relies on a lot of pointers just about everywhere.

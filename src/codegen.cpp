@@ -610,13 +610,13 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 			// type they fit in.
 			int numbits = 0;
 			if (value <= 0xff) {
-				result.type = PType(lookup_base_type("uint8"));
+				result.type = PType(lookup_base_type("u8"));
 			} else if (value <= 0xffff) {
-				result.type = PType(lookup_base_type("uint16"));
+				result.type = PType(lookup_base_type("u16"));
 			} else if (value <= 0xffffffff) {
-				result.type = PType(lookup_base_type("uint32"));
+				result.type = PType(lookup_base_type("u32"));
 			} else if (value <= 0xffffffffffffffff) {
-				result.type = PType(lookup_base_type("uint64"));
+				result.type = PType(lookup_base_type("u64"));
 			} else {
 				set_error(node, "integer literal too large");
 				break;
@@ -640,7 +640,7 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 			// TODO: Also, we probably want to deal with oversized floats or whatever
 			// here.
 			auto pnode = *node->toString();
-			result.type = PType(lookup_base_type("float64"));
+			result.type = PType(lookup_base_type("f64"));
 			APFloat number(0.0);
 			number.convertFromString(pnode.value, APFloat::rmNearestTiesToEven);
 			result.llvmval = ConstantFP::get(getGlobalContext(), number);
@@ -653,7 +653,7 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 			size_t string_length = strlen(str);
 
 			PType *byte_type = (PType *)memory->reserve(sizeof(PType));
-			*byte_type = PType(lookup_base_type("uint8"));
+			*byte_type = PType(lookup_base_type("u8"));
 			PType *array_type = (PType *)memory->reserve(sizeof(PType));
 			*array_type = PType(NULL, false, string_length + 1, byte_type);
 			result.type = PType(NULL, true, 0, array_type);
