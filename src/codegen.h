@@ -25,7 +25,7 @@ struct CodeGenerator {
 	Module *generate(int optimisation_level);
 private:
 	void generate_statement(ASTNode *node);
-	PVariable generate_lvalue(ASTNode *node);
+	PVariable generate_lvalue(ASTNode *node, bool internal = false);
 	PValue generate_rvalue(ASTNode *node);
 	PFunction generate_function(ASTNode *node);
 	PBaseType *lookup_base_type(const char *name);

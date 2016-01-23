@@ -154,7 +154,7 @@ bool CodeGenerator::explicit_type_convert(PValue *source,
 // that the type returned is for the loaded value, not the value returned (as,
 // in the context of this member function, the loaded value is the thing of
 // importance).
-PVariable CodeGenerator::generate_lvalue(ASTNode *node) {
+PVariable CodeGenerator::generate_lvalue(ASTNode *node, bool internal) {
 	PVariable result;
 
 	switch (node->type) {
@@ -195,6 +195,9 @@ PVariable CodeGenerator::generate_lvalue(ASTNode *node) {
 			if (variable_type.base_type || variable_type.indirect_type)
 				result.type = variable_type;
 
+			if (pnode.is_constant)
+				result.type.flags |= CONSTANT;
+
 			// alloca at the entry block so that the mem2reg pass can hit
 			Type *variable_llvm_type = result.type.getLLVMType();
 			result.llvmval = create_entry_block_alloca(variable_name,
@@ -208,9 +211,13 @@ PVariable CodeGenerator::generate_lvalue(ASTNode *node) {
 		case NODE_IDENTIFIER:
 		{
 			auto pnode = *node->toString();
+
 			PVariable *value = lookup_symbol(pnode.value);
 			if (!value) {
 				set_error(node, "failed to find symbol '%s'", pnode.value);
+				break;
+			} else if (!internal && value->type.flags & CONSTANT) {
+				set_error(node, "cannot take lvalue of constant");
 				break;
 			}
 
@@ -664,7 +671,7 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 		case NODE_IDENTIFIER:
 		{
 			auto pnode = *node->toString();
-			PVariable value = generate_lvalue(node);
+			PVariable value = generate_lvalue(node, true);
 			if (error)
 				break;
 			result.type = value.type;
@@ -856,10 +863,6 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 			break;
 		case NODE_VARIABLE_DECLARATION:
 		{
-			if (node->toVariableDeclaration()->is_constant) {
-				set_error(node, "constants values are not yet supported.");
-				break;
-			}
 			generate_lvalue(node);
 			break;
 		}

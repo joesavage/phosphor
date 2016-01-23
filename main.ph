@@ -9,6 +9,10 @@ main :: () -> i32 {
 	message[3] = 0b100001;
 	message[4] = 0;
 
+	constants_work_now :: 0x5A;
+	putchar(constants_work_now);
+	putchar(10);
+
 	i: i32 = 0;
 	for i < 5 {
 		puts((u8^)&message);
