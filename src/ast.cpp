@@ -20,9 +20,7 @@ void ASTNode::initialise(ASTNodeType type) {
 			toVariableDeclaration()->init = NULL;
 			break;
 		case NODE_IF:
-		case NODE_DO_LOOP:
-		case NODE_WHILE_LOOP:
-		case NODE_UNTIL_LOOP:
+		case NODE_FOR_LOOP:
 			toConditional()->condition = NULL;
 			toConditional()->then = NULL;
 			toConditional()->otherwise = NULL;
@@ -41,7 +39,6 @@ void ASTNode::initialise(ASTNodeType type) {
 			toFunctionCall()->name = NULL;
 			toFunctionCall()->args = MemoryList<ASTNode *>();
 			break;
-		case NODE_FOR_LOOP:
 		case NODE_BREAK:
 		case NODE_CONTINUE:
 		case NODE_RETURN:
@@ -115,7 +112,7 @@ struct ASTNode::data::variable_declaration *ASTNode::toVariableDeclaration() {
 	return &this->data.variable_declaration;
 }
 struct ASTNode::data::conditional *ASTNode::toConditional() {
-	assert(type == NODE_IF || type == NODE_WHILE_LOOP);
+	assert(type == NODE_IF || type == NODE_FOR_LOOP);
 	return &this->data.conditional;
 }
 struct ASTNode::data::function *ASTNode::toFunction() {

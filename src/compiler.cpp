@@ -160,9 +160,6 @@ static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 				printf_ast(node->toConditional()->otherwise, "ELSE", depth + 1);
 				break;
 			}
-			case NODE_DO_LOOP:
-			case NODE_WHILE_LOOP:
-			case NODE_UNTIL_LOOP:
 			case NODE_FOR_LOOP:
 			case NODE_BREAK:
 			case NODE_CONTINUE:

@@ -10,7 +10,7 @@ main :: () -> i32 {
 	message[4] = 0;
 
 	i: i32 = 0;
-	while i < 5 {
+	for i < 5 {
 		puts((u8^)&message);
 		i = i + 1;
 	}

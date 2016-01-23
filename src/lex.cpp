@@ -129,8 +129,7 @@ bool Lexer::scan_word(PToken *token) {
 	bool is_keyword = false;
 	const char *keywords[] = {
 		"if", "else", "true", "false", "break", "continue",
-		"do", "while", "until", "for",
-		"fn", "return", "auto"
+		"do", "until", "for", "return", "auto"
 	};
 	for (size_t i = 0; i < sizeof(keywords) / sizeof(keywords[0]); ++i) {
 		unsigned long length = (unsigned long)(cursor - begin);

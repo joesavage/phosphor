@@ -910,7 +910,7 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 			builder->SetInsertPoint(merge);
 			break;
 		}
-		case NODE_WHILE_LOOP:
+		case NODE_FOR_LOOP:
 		{
 			auto pnode = *node->toConditional();
 			Function *function;
@@ -973,9 +973,6 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 			builder->CreateRet(val.llvmval);
 			break;
 		}
-		case NODE_DO_LOOP:
-		case NODE_UNTIL_LOOP:
-		case NODE_FOR_LOOP:
 		case NODE_BREAK:
 		case NODE_CONTINUE:
 			set_error(node, "feature not yet implemented!");

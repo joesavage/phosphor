@@ -747,23 +747,26 @@ ASTNode *Parser::parse_if() {
 	return result;
 }
 
-ASTNode *Parser::parse_while() {
-	if (!scan_token(TOKEN_KEYWORD, "while")) {
-		set_error("expected 'while' keyword for while loop");
+ASTNode *Parser::parse_loop() {
+	if (!scan_token(TOKEN_KEYWORD, "for")) {
+		set_error("expected 'for' keyword for 'for' loop");
 		return NULL;
 	}
 
-	ASTNode *result = create_node(NODE_WHILE_LOOP);
+	ASTNode *result = create_node(NODE_FOR_LOOP);
 	result->toConditional()->condition = parse_expression();
 	if (!result->toConditional()->condition || error) {
 		if (!error)
-			set_error("failed to parse expression in while loop");
+			set_error("failed to parse expression in for loop");
 		return NULL;
 	}
+
+	// TODO: Accept traditional for loops with three sections. Comma-separated.
+
 	result->toConditional()->then = parse_block();
 	if (!result->toConditional()->then || error) {
 		if (!error)
-			set_error("failed to parse block in while loop");
+			set_error("failed to parse block in for loop");
 		return NULL;
 	}
 
@@ -771,7 +774,7 @@ ASTNode *Parser::parse_while() {
 		result->toConditional()->otherwise = parse_block();
 		if (!result->toConditional()->otherwise || error) {
 			if (!error)
-				set_error("failed to parse block for 'else' in while loop");
+				set_error("failed to parse 'else' block in for loop");
 			return NULL;
 		}
 	}
@@ -804,8 +807,8 @@ ASTNode *Parser::parse_statement() {
 		return parse_constant_declaration();
 	} else if (peek_token(TOKEN_KEYWORD, "if")) {
 		return parse_if();
-	} else if (peek_token(TOKEN_KEYWORD, "while")) {
-		return parse_while();
+	} else if (peek_token(TOKEN_KEYWORD, "for")) {
+		return parse_loop();
 	} else if (peek_token(TOKEN_KEYWORD, "return")) {
 		return parse_return();
 	} else if (peek_token(TOKEN_RESERVED_PUNCTUATION, "{") &&
