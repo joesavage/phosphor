@@ -54,7 +54,7 @@ private:
 	ASTNode *parse_variable_declaration();
 	ASTNode *parse_block();
 	bool peek_function();
-	ASTNode *parse_function(char *function_name);
+	ASTNode *parse_function(ASTNode *function_name);
 	ASTNode *parse_if();
 	ASTNode *parse_loop();
 	ASTNode *parse_return();

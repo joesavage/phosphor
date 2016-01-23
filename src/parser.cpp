@@ -220,7 +220,7 @@ ASTNode *Parser::parse_type() {
 		// We could probably do some more efficient memory allocation here.
 		PType *old_ty = (PType *)memory->reserve(sizeof(PType));
 		*old_ty = result->toType()->value;
-		result->toType()->value = PType(NULL, false, array_size, old_ty);
+		result->toType()->value = PType(NULL, EMPTY, array_size, old_ty);
 	}
 
 	if (cursor->value[0] == '^') {
@@ -230,7 +230,7 @@ ASTNode *Parser::parse_type() {
 				// We could probably do some more efficient memory allocation here.
 				PType *old_ty = (PType *)memory->reserve(sizeof(PType));
 				*old_ty = result->toType()->value;
-				result->toType()->value = PType(NULL, true, 0, old_ty);
+				result->toType()->value = PType(NULL, POINTER, 0, old_ty);
 			} else {
 				set_error("unexpected operator in variable declaration");
 				return NULL;
@@ -491,7 +491,7 @@ bool Parser::peek_constant_declaration() {
 
 // Merge with 'parse_variable_declaration' when functions are first-class?
 ASTNode *Parser::parse_constant_declaration() {
-	ASTNode *result = create_node(NODE_CONSTANT_DECLARATION);
+	ASTNode *result = NULL;
 
 	if (peek_token_type(TOKEN_KEYWORD)) {
 		set_error("cannot declare constant with reserved keyword name");
@@ -500,8 +500,8 @@ ASTNode *Parser::parse_constant_declaration() {
 		set_error("expected identifier for constant declaration");
 		return NULL;
 	}
-	result->toVariableDeclaration()->name = parse_identifier();
-	assert(result->toVariableDeclaration()->name);
+	ASTNode *name = parse_identifier();
+	assert(name);
 
 	if (!scan_token(TOKEN_OPERATOR, "::")) {
 		set_error("expected '::' in constant declaration");
@@ -515,14 +515,17 @@ ASTNode *Parser::parse_constant_declaration() {
 			set_error("functions can only be defined in the global scope");
 			return NULL;
 		}
-		result->toVariableDeclaration()->init = parse_function(result->toVariableDeclaration()->name->toString()->value);
+		result = parse_function(name);
 	} else {
+		result = create_node(NODE_VARIABLE_DECLARATION);
+		result->toVariableDeclaration()->name = name;
 		result->toVariableDeclaration()->init = parse_expression();
-	}
-	if (!result->toVariableDeclaration()->init) {
-		if (!error)
-			set_error("invalid expression for constant declaration");
-		return NULL;
+		result->toVariableDeclaration()->is_constant = true;
+		if (!result->toVariableDeclaration()->init) {
+			if (!error)
+				set_error("invalid expression for constant declaration");
+			return NULL;
+		}
 	}
 
 	return result;
@@ -639,10 +642,11 @@ bool Parser::peek_function() {
 	return true;
 }
 
-ASTNode *Parser::parse_function(char *function_name) {
+ASTNode *Parser::parse_function(ASTNode *function_name) {
 	ASTNode *signature = create_node(NODE_FUNCTION_SIGNATURE);
 
-	set_environment(signature, env, function_name);
+	signature->toFunctionSignature()->name = function_name;
+	set_environment(signature, env, function_name->toString()->value);
 
 	Environment *prev_env = env;
 	env = signature->toFunctionSignature()->env;

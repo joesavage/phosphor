@@ -27,7 +27,7 @@ private:
 	void generate_statement(ASTNode *node);
 	PVariable generate_lvalue(ASTNode *node);
 	PValue generate_rvalue(ASTNode *node);
-	PFunction generate_function(ASTNode *node, char *name);
+	PFunction generate_function(ASTNode *node);
 	PBaseType *lookup_base_type(const char *name);
 	PFunction *lookup_function(const char *name);
 	PVariable *lookup_symbol(const char *name);

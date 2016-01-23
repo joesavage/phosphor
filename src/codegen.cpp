@@ -81,7 +81,7 @@ bool CodeGenerator::implicit_type_convert(PValue *source,
 	Type *dest_llvm = dest_type.getLLVMType();
 
 	// For now, pointers and arrays don't do any implicit type conversion.
-	if (source->type.is_pointer || dest_type.is_pointer
+	if (source->type.flags & POINTER || dest_type.flags & POINTER
 	 || source->type.array_size || dest_type.array_size)
 		return false;
 
@@ -227,7 +227,7 @@ PVariable CodeGenerator::generate_lvalue(ASTNode *node) {
 				if (error)
 					break;
 
-				if (!value.type.is_pointer) {
+				if (!value.type.flags & POINTER) {
 					set_error(pnode.operand, "cannot dereference non-pointer operand");
 					break;
 				}
@@ -350,7 +350,7 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 			// TODO: Handle pointer (+ other modifiers?) in operations!
 			// TODO: Pointer subtraction at some point. Plus, clean up all this type
 			// code - particularly with regards to pointers, modifiers, etc.
-			if (left.type.is_pointer) {
+			if (left.type.flags & POINTER) {
 				if (strcmp(pnode.value, "+")) {
 					set_error(node, "pointer types are not yet supported in non-plus "
 					          "binary expressions.");
@@ -380,7 +380,7 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 			// to numeric and pointer types only. Fix the structure of this!
 			PType type = left.type;
 			PBaseType *base_type = type.getBaseType();
-			if (!base_type->is_numeric && !type.is_pointer) {
+			if (!base_type->is_numeric && !type.flags & POINTER) {
 				set_error(pnode.right,
 				          "non-numeric type '%s' specified for binary operation",
 				          left.type.to_string());
@@ -454,7 +454,7 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 					result.llvmval = builder->CreateICmpUGE(left.llvmval,
 					                                       right.llvmval, "gttmp");
 			} else if (!strcmp(pnode.value, "+")) {
-				if (type.is_pointer)
+				if (type.flags & POINTER)
 					result.llvmval = builder->CreateGEP(left.llvmval, right.llvmval);
 				else if (base_type->is_float)
 					result.llvmval = builder->CreateFAdd(left.llvmval,
@@ -511,7 +511,7 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 
 				result.type.indirect_type = (PType *)memory->reserve(sizeof(PType));
 				*result.type.indirect_type = variable.type;
-				result.type.is_pointer = true;
+				result.type.flags = POINTER;
 				result.llvmval = variable.llvmval;
 				break;
 			} else if (!strcmp(pnode.value, "*")) {
@@ -655,8 +655,8 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 			PType *byte_type = (PType *)memory->reserve(sizeof(PType));
 			*byte_type = PType(lookup_base_type("u8"));
 			PType *array_type = (PType *)memory->reserve(sizeof(PType));
-			*array_type = PType(NULL, false, string_length + 1, byte_type);
-			result.type = PType(NULL, true, 0, array_type);
+			*array_type = PType(NULL, EMPTY, string_length + 1, byte_type);
+			result.type = PType(NULL, POINTER, 0, array_type);
 			result.llvmval = builder->CreateGlobalString(StringRef(str,
 			                                                       string_length));
 			break;
@@ -679,7 +679,7 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 	return result;
 }
 
-PFunction CodeGenerator::generate_function(ASTNode *node, char *name) {
+PFunction CodeGenerator::generate_function(ASTNode *node) {
 	PFunction result;
 
 	switch (node->type) {
@@ -701,7 +701,7 @@ PFunction CodeGenerator::generate_function(ASTNode *node, char *name) {
 			if (error)
 				break;
 
-			char *function_name = name; // pnode.name->toString()->value;
+			char *function_name = pnode.name->toString()->value;
 			assert(function_name);
 			PType type = pnode.type;
 			FunctionType *function_type;
@@ -769,7 +769,7 @@ PFunction CodeGenerator::generate_function(ASTNode *node, char *name) {
 		case NODE_FUNCTION:
 		{
 			auto pnode = *node->toFunction();
-			PFunction function = generate_function(pnode.signature, name);
+			PFunction function = generate_function(pnode.signature);
 			if (error)
 				break;
 
@@ -847,26 +847,22 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 		case NODE_BINARY_OPERATOR:
 			generate_rvalue(node);
 			break;
-		case NODE_CONSTANT_DECLARATION:
-		{
-			auto pnode = *node->toVariableDeclaration();
-			assert(pnode.init);
-			switch (pnode.init->type) {
-				case NODE_FUNCTION_SIGNATURE:
-				case NODE_FUNCTION:
-					generate_function(pnode.init, pnode.name->toString()->value);
-					break;
-				default:
-					set_error(pnode.init, "This type of constant declaration is not yet supported.");
-			}
+		case NODE_FUNCTION_SIGNATURE:
+		case NODE_FUNCTION:
+			generate_function(node);
 			break;
-		}
 		case NODE_FUNCTION_CALL:
 			generate_rvalue(node);
 			break;
 		case NODE_VARIABLE_DECLARATION:
+		{
+			if (node->toVariableDeclaration()->is_constant) {
+				set_error(node, "constants values are not yet supported.");
+				break;
+			}
 			generate_lvalue(node);
 			break;
+		}
 		case NODE_IF:
 		{
 			auto pnode = *node->toConditional();

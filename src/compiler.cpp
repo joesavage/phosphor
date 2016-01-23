@@ -63,13 +63,11 @@ static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 				printf_ast(pdata.statements, "STATEMENTS", depth + 1);
 				break;
 			}
-			case NODE_CONSTANT_DECLARATION:
 			case NODE_VARIABLE_DECLARATION:
 			{
 				auto pdata = *node->toVariableDeclaration();
-				fprintf(stderr, node->type == NODE_VARIABLE_DECLARATION ? "VARDECL\n"
-				                                                        : "CONSDECL\n");
-				for (size_t i = 0; i < depth; ++i)
+				fprintf(stderr, "VARDECL\n");
+				for (size_t i = 0; i <= depth; ++i)
 					fprintf(stderr, "   ");
 				fprintf(stderr, "TYPE<%s>\n", pdata.type.to_string());
 				printf_ast(pdata.name, "NAME", depth + 1);

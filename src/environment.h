@@ -43,18 +43,24 @@ struct PBaseType {
 	}
 };
 
+typedef uint_least32_t PTypeFlags;
+enum PTypeFlag {
+	EMPTY     = 0,
+	CONSTANT  = 1 << 0,
+	POINTER   = 1 << 1
+};
+
 struct PType {
 	PBaseType *base_type; // TODO: We'll never use both of these at the same time
 	PType *indirect_type;
 
-	bool is_pointer; // TODO: We'll never use both of these at the same time
 	unsigned int array_size;
-	// TODO: Other modifiers (possibly bitflag all modifiers in future)
+	PTypeFlags flags;
 
-	PType(PBaseType *base_type = NULL, bool is_pointer = 0,
+	PType(PBaseType *base_type = NULL, PTypeFlags flags = EMPTY,
 	      unsigned int array_size = 0, PType *indirect_type = NULL) {
 		this->base_type = base_type;
-		this->is_pointer = is_pointer;
+		this->flags = flags;
 		this->array_size = array_size;
 		this->indirect_type = indirect_type;
 	}
@@ -62,7 +68,7 @@ struct PType {
 	Type *getLLVMType() {
 		Type *result = NULL;
 
-		if (is_pointer) {
+		if (flags & POINTER) {
 			assert(indirect_type);
 			result = PointerType::get(indirect_type->getLLVMType(), 0);
 		} else if (array_size > 0) {
@@ -78,7 +84,7 @@ struct PType {
 	}
 
 	PBaseType *getBaseType() {
-		if (is_pointer || array_size > 0)
+		if (flags & POINTER || array_size > 0)
 			return indirect_type->getBaseType();
 		return base_type;
 	}
@@ -91,11 +97,15 @@ struct PType {
 		char *result = (char *)heap_alloc(buf_len + 1);
 		result[buf_len - 1] = '\0';
 
-		if (is_pointer || array_size > 0) {
+		if (flags & POINTER || array_size > 0) {
 			char *indirect_ty = indirect_type->to_string();
 			strncpy(result, indirect_ty, buf_len);
 
-			if (is_pointer)
+			if (flags & CONSTANT)
+				strncpy(result + strlen(indirect_ty),
+				        "const ", buf_len - strlen(indirect_ty));
+
+			if (flags & POINTER)
 				strncpy(result + strlen(indirect_ty), "^", buf_len - strlen(indirect_ty));
 			else if (array_size > 0) // TODO: Include array size in output
 				strncpy(result + strlen(indirect_ty), "[]", buf_len - strlen(indirect_ty));
@@ -110,7 +120,7 @@ struct PType {
 
 	bool operator==(const PType &ty) {
 		return ty.base_type == base_type
-		    && ty.is_pointer == is_pointer
+		    && ty.flags == flags
 		    && ty.array_size == array_size
 		    && ((!ty.indirect_type && !indirect_type)
 		     || (*ty.indirect_type == *indirect_type));

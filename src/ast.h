@@ -8,7 +8,6 @@ enum ASTNodeType {
 	NODE_VOID,
 	NODE_STATEMENTS,
 	NODE_VARIABLE_DECLARATION,
-	NODE_CONSTANT_DECLARATION,
 	NODE_IF,
 	NODE_FOR_LOOP,
 	NODE_BREAK,
@@ -64,6 +63,7 @@ class ASTNode {
 			PType type;
 			ASTNode *name;
 			ASTNode *init;
+			bool is_constant;
 		} variable_declaration;
 		struct conditional {
 			ASTNode *condition;
