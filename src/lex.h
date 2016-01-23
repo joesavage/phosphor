@@ -16,6 +16,14 @@ enum PTokenType {
 	TOKEN_FLOAT,
 	TOKEN_STRING
 };
+static const char *pTokenTypeNames[] = { "TOKEN_UNINITIALIZED",
+                                         "TOKEN_RESERVED_PUNCTUATION",
+                                         "TOKEN_OPERATOR",
+                                         "TOKEN_KEYWORD",
+                                         "TOKEN_IDENTIFER",
+                                         "TOKEN_INT",
+                                         "TOKEN_FLOAT",
+                                         "TOKEN_STRING" };
 
 #define MINIMUM_PRECEDENCE 1
 

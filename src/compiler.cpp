@@ -44,7 +44,7 @@ static void write_module_to_file(Module *module, const char *path) {
 static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 	if (node != NULL) {
 		for (size_t i = 0; i < depth; ++i)
-			fprintf(stderr, "   ");
+			fprintf(stderr, "    ");
 		if (prefix)
 			fprintf(stderr, "%s: ", prefix);
 		switch (node->type) {
@@ -68,7 +68,7 @@ static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 				auto pdata = *node->toVariableDeclaration();
 				fprintf(stderr, "VARDECL\n");
 				for (size_t i = 0; i <= depth; ++i)
-					fprintf(stderr, "   ");
+					fprintf(stderr, "    ");
 				fprintf(stderr, "TYPE<%s>\n", pdata.type.to_string());
 				printf_ast(pdata.name, "NAME", depth + 1);
 				printf_ast(pdata.init, "INIT", depth + 1);
@@ -128,8 +128,8 @@ static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 				auto pdata = *node->toFunctionSignature();
 				fprintf(stderr, "FUNCTION_SIG\n");
 				printf_ast(pdata.name, "NAME", depth + 1);
-				for (size_t i = 0; i < depth; ++i)
-					fprintf(stderr, "   ");
+				for (size_t i = 0; i <= depth; ++i)
+					fprintf(stderr, "    ");
 				fprintf(stderr, "TYPE<%s>\n", pdata.type.to_string());
 				for (size_t i = 0; i < pdata.args.size(); ++i)
 					printf_ast(pdata.args[i], "ARGS", depth + 1);
@@ -311,10 +311,12 @@ int main(int argc, char *argv[]) {
 	}
 
 	// Lex Debug Output
-	fprintf(stderr, "Tokens: ");
-	for (size_t i = 0; i < parser.token_count; ++i)
-		fprintf(stderr, "%u<%s> ", parser.tokens[i].type, parser.tokens[i].value);
-	fprintf(stderr, "\n\n");
+	fprintf(stderr, "== TOKENS ==\n");
+	for (size_t i = 0; i < parser.token_count; ++i) {
+		fprintf(stderr, "%-5zu %-30s\t%s\n", i,
+		        pTokenTypeNames[parser.tokens[i].type], parser.tokens[i].value);
+	}
+	fprintf(stderr, "\n");
 
 	// Parsing
 	generator.root = parser.parse();
@@ -330,10 +332,12 @@ int main(int argc, char *argv[]) {
 	}
 
 	// Parse Debug Output
+	fprintf(stderr, "== AST ==\n");
 	printf_ast(generator.root, "ROOT");
+	fprintf(stderr, "\n");
 
 	 // Code Generation
-	fprintf(stderr, "\nLLVM IR: \n");
+	fprintf(stderr, "== LLVM IR ==\n");
 	generator.env = parser.env;
 	Module *module = generator.generate(optimisation_level);
 	if (generator.error) {
