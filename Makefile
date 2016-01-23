@@ -7,31 +7,30 @@ DESTDIR=src
 SOURCES=$(wildcard $(SRCDIR)/*.cpp)
 OBJECTS=$(SOURCES:$(SRCDIR)/%.cpp=$(DESTDIR)/%.o)
 
-# TODO: Actually think through dependencies properly.
-# I've had a fair few bugs due to poor Makefile dependencies so far.
+# NOTE: These dependencies are probably wrong, so if in doubt about some weird error, try running 'clean' before building.
 
-phosphor: clean $(OBJECTS)
+phosphor: $(OBJECTS)
 	$(CC) $(LDFLAGS) -o phosphor $(OBJECTS) $(LDLIBS) 
 
-compiler.o: compiler.cpp parser.h lex.cpp lex.h hashmap.hpp helpers.h memoryarena.h memorylist.hpp
+compiler.o: compiler.cpp compiler.h helpers.h memoryarena.h memorylist.hpp hashmap.hpp lex.h parser.h
 	$(CC) $(CPPFLAGS) -c $< -o $@
 
-codegen.o: codegen.cpp codegen.h environment.h hashmap.hpp ast.h helpers.h
+codegen.o: codegen.cpp codegen.h helpers.h memoryarena.h memorylist.hpp hashmap.hpp environment.h ast.h
 	$(CC) $(CPPFLAGS) -c $< -o $@
 
-parser.o: parser.cpp parser.h environment.h hashmap.hpp ast.h helpers.h memoryarena.h memorylist.hpp
+parser.o: parser.cpp parser.h helpers.h memoryarena.h memorylist.hpp hashmap.hpp lex.h ast.h environment.h
 	$(CC) $(CPPFLAGS) -c $< -o $@
 
-lex.o: lex.cpp lex.h hashmap.hpp helpers.h memoryarena.h
+lex.o: lex.cpp lex.h helpers.h memoryarena.h hashmap.hpp
 	$(CC) $(CPPFLAGS) -c $< -o $@
 
 helpers.o: helpers.cpp helpers.h
 	$(CC) $(CPPFLAGS) -c $< -o $@
 
-ast.o: ast.cpp ast.h helpers.h
+ast.o: ast.cpp ast.h helpers.h memorylist.hpp environment.h
 	$(CC) $(CPPFLAGS) -c $< -o $@
 
-memoryarena.o: memoryarena.cpp memoryarena.h memorylist.hpp helpers.h
+memoryarena.o: memoryarena.cpp memoryarena.h helpers.h memorylist.hpp
 	$(CC) $(CPPFLAGS) -c $< -o $@
 
 clean:

@@ -1,3 +1,7 @@
+#include "helpers.h"
+#include "memoryarena.h"
+#include "memorylist.hpp"
+#include "hashmap.hpp"
 #include "lex.h"
 #include "parser.h"
 #include "codegen.h"
@@ -173,8 +177,6 @@ static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 static void usage(const char *program_name) {
 	fatal_error("usage: %s [-O optimisation_level] [-o output_file]\n", program_name);
 }
-
-#include "memorylist.hpp"
 
 int main(int argc, char *argv[]) {
 	Lexer lexer = {};
