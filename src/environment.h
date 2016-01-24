@@ -143,21 +143,7 @@ struct PValue {
 		this->llvmval = llvmval;
 	}
 };
-
-struct PVariable {
-	PType type;
-	AllocaInst *llvmval;
-
-	PVariable() {
-		type = NULL;
-		llvmval = NULL;
-	}
-
-	PVariable(PType type, AllocaInst *llvmval) {
-		this->type = type;
-		this->llvmval = llvmval;
-	}
-};
+typedef PValue PVariable;
 
 // TODO: Function overloading should be supported here one day?
 struct PFunction {

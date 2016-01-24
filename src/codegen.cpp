@@ -6,6 +6,7 @@
 #include "llvm/ExecutionEngine/ExecutionEngine.h"
 #include "llvm/ExecutionEngine/SectionMemoryManager.h"
 #include "llvm/Support/TargetSelect.h"
+#include "llvm/Support/raw_ostream.h"
 #include "llvm/Analysis/Passes.h"
 #include "llvm/Transforms/Scalar.h"
 
@@ -58,22 +59,37 @@ PValue CodeGenerator::get_boolean_value(bool value) {
 	return result;
 }
 
-AllocaInst *CodeGenerator::create_entry_block_alloca(char *name, Type *type) {
+Value *CodeGenerator::create_variable(char *name, Type *type, Value *init,
+                                      bool constant) {
 	if (!env->parent) {
-		// Global variables in LLVM are 'GlobalVariable's, not 'AllocaInst's...
-		fatal_error("global variables are currently not implemented.\n");
-		return NULL;
+		GlobalVariable *test = new GlobalVariable(*module, type, constant,
+		                                          GlobalValue::ExternalLinkage,
+		                                          0, name);
+		if (init) {
+			assert(isa<Constant>(init));
+			test->setInitializer((Constant *)init);
+		} else {
+			// TODO: cast a zero value to the type, and use as the initializer.
+			fatal_error("global default initialization is not yet implemented");
+			return NULL;
+		}
+		return test;
 	}
 
+	// TODO: Shouldn't we able able to specify some stack variables as constant?
 	PFunction *function = lookup_function(env->current_function);
 	if (!function) {
 		fatal_error("invalid 'current' function for alloca creation\n");
 		return NULL;
 	}
 
+	// alloca at the entry block so that the mem2reg pass can hit
 	BasicBlock *entry_bb = &function->llvmval->getEntryBlock();
 	IRBuilder<> entry_builder(entry_bb, entry_bb->begin());
-	return entry_builder.CreateAlloca(type, 0, name);
+	Value *result =  entry_builder.CreateAlloca(type, 0, name);
+	if (init)
+		builder->CreateStore(init, result);
+	return result;
 }
 
 bool CodeGenerator::create_cast(PValue *source, PType dest_type) {
@@ -183,7 +199,7 @@ bool CodeGenerator::explicit_type_convert(PValue *source,
 // in the context of this member function, the loaded value is the thing of
 // importance).
 PVariable CodeGenerator::generate_lvalue(ASTNode *node, bool internal) {
-	PVariable result;
+	PVariable result = {};
 
 	switch (node->type) {
 		case NODE_VARIABLE_DECLARATION:
@@ -226,14 +242,10 @@ PVariable CodeGenerator::generate_lvalue(ASTNode *node, bool internal) {
 			if (pnode.is_constant)
 				result.type.flags |= CONSTANT;
 
-			// alloca at the entry block so that the mem2reg pass can hit
 			Type *variable_llvm_type = result.type.getLLVMType();
-			result.llvmval = create_entry_block_alloca(variable_name,
-			                                           variable_llvm_type);
+			result.llvmval = create_variable(variable_name, variable_llvm_type,
+			                                 value.llvmval, pnode.is_constant);
 			env->symbol_table.set(variable_name, result);
-
-			if (pnode.init)
-				builder->CreateStore(value.llvmval, result.llvmval);
 			break;
 		}
 		case NODE_IDENTIFIER:
@@ -268,7 +280,7 @@ PVariable CodeGenerator::generate_lvalue(ASTNode *node, bool internal) {
 				}
 				assert(value.type.indirect_type);
 				result.type = *value.type.indirect_type;
-				result.llvmval = (AllocaInst *)value.llvmval;
+				result.llvmval = value.llvmval;
 				break;
 			}
 
@@ -295,7 +307,7 @@ PVariable CodeGenerator::generate_lvalue(ASTNode *node, bool internal) {
 					indices.push_back(builder->getInt32(0));
 					indices.push_back(right.llvmval);
 					result.type = *left.type.indirect_type;
-					result.llvmval = (AllocaInst *)builder->CreateGEP(left.llvmval, indices);
+					result.llvmval = builder->CreateGEP(left.llvmval, indices);
 					break;
 				}
 				break;
@@ -325,7 +337,7 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 				PVariable left = generate_lvalue(pnode.left);
 				if (error)
 					break;
-				if (!isa<AllocaInst>(left.llvmval)) {
+				if (!left.llvmval) {
 					set_error(pnode.left, "value on left of assignment is not an lvalue");
 					break;
 				}
@@ -341,7 +353,7 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 					break;
 				}
 
-				builder->CreateStore(value.llvmval, (AllocaInst *)left.llvmval);
+				builder->CreateStore(value.llvmval, left.llvmval);
 				result.type = value.type;
 				result.llvmval = value.llvmval;
 				break;
@@ -1045,8 +1057,8 @@ Module *CodeGenerator::generate(int optimisation_level) {
 	generate_statement(root);
 	if (error)
 		return NULL;
-	if (verifyModule(*module)) {
-		fatal_error("Failed to verify program module.");
+	if (verifyModule(*module, &errs())) {
+		fatal_error("Failed to verify program module.\n");
 		return NULL;
 	}
 

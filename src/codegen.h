@@ -35,7 +35,7 @@ private:
 	bool create_cast(PValue *source, PType dest_type);
 	bool implicit_type_convert(PValue *source, PType dest_extype);
 	bool explicit_type_convert(PValue *source, PType dest_extype);
-	AllocaInst *create_entry_block_alloca(char *name, Type *type);
+	Value *create_variable(char *name, Type *type, Value *init, bool constant);
 	void set_error(ASTNode *node, const char *format, ...);
 };
 
