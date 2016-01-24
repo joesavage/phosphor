@@ -70,6 +70,11 @@ PToken *Parser::scan_token(PTokenType type, const char *value) {
 	return NULL;
 }
 
+bool Parser::peek_end_of_line() {
+	return peek_token(TOKEN_RESERVED_PUNCTUATION, ";") ||
+	       eof() || (!safe(-1) && cursor[-1].line_no < cursor[0].line_no);
+}
+
 bool Parser::scan_end_of_line() {
 	if (peek_token(TOKEN_RESERVED_PUNCTUATION, ";")) {
 		++cursor;
@@ -799,11 +804,13 @@ ASTNode *Parser::parse_return() {
 		return NULL;
 	}
 
-	result->toUnaryOperator()->operand = parse_expression();
-	if (!result->toUnaryOperator()->operand) {
-		if (!error)
-			set_error("expected expression following 'return' keyword\n");
-		return NULL;
+	if (!peek_end_of_line()) {
+		result->toUnaryOperator()->operand = parse_expression();
+		if (!result->toUnaryOperator()->operand) {
+			if (!error)
+				set_error("expected expression following 'return' keyword\n");
+			return NULL;
+		}
 	}
 
 	return result;

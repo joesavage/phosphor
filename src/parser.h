@@ -31,6 +31,7 @@ private:
 	                     unsigned int col_no);
 	PToken *scan_token(PTokenType type, const char *value);
 	PToken *scan_token_type(PTokenType type);
+	bool peek_end_of_line();
 	bool scan_end_of_line();
 	void set_error(const char *format, ...);
 

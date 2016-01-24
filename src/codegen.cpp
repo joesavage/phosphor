@@ -634,14 +634,15 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 			if (error)
 				break;
 
-			// TODO: This fails for a function that returns 'void' - you can't
-			// assign names (e.g. 'calltmp') to 'void' values (for obvious
-			// reasons).
+			char *value_name = "";
+			if (pfunction->return_type != PType(lookup_base_type("void"))) {
+				value_name = "calltmp";
+			}
 			result.type = pfunction->return_type;
 			result.llvmval = builder->CreateCall(function,
 			                                     ArrayRef<Value *>(args.getPointer(0),
 			                                                       args_count),
-			                                     "calltmp");
+			                                     value_name);
 			break;
 		}
 		case NODE_CONSTANT_INT:
@@ -988,24 +989,27 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 		case NODE_RETURN:
 		{
 			auto pnode = *node->toUnaryOperator();
-			PValue val;
-			if (pnode.operand) {
-				val = generate_rvalue(pnode.operand);
-				if (error)
-					break;
-			} else {
-				val.llvmval = NULL;
-			}
 
 			PFunction *function = lookup_function(env->current_function);
-			if (!implicit_type_convert(&val, function->return_type)) {
-				set_error(pnode.operand,
-				          "type mismatch in return statement - expected '%s', got '%s'",
-				          function->return_type.to_string(), val.type.to_string());
-				break;
-			}
+			if (!pnode.operand) {
+				if (function->return_type != PType(lookup_base_type("void"))) {
+					set_error(node, "expected return value");
+					break;
+				}
+				builder->CreateRetVoid();
+			} else {
+				PValue val = generate_rvalue(pnode.operand);
+				if (error)
+					break;
 
-			builder->CreateRet(val.llvmval);
+				if (!implicit_type_convert(&val, function->return_type)) {
+					set_error(pnode.operand,
+					          "type mismatch in return statement - expected '%s', got '%s'",
+					          function->return_type.to_string(), val.type.to_string());
+					break;
+				}
+				builder->CreateRet(val.llvmval);
+			}
 			break;
 		}
 		case NODE_BREAK:
