@@ -32,6 +32,7 @@ private:
 	PFunction *lookup_function(const char *name);
 	PVariable *lookup_symbol(const char *name);
 	PValue get_boolean_value(bool value);
+	bool create_cast(PValue *source, PType dest_type);
 	bool implicit_type_convert(PValue *source, PType dest_extype);
 	bool explicit_type_convert(PValue *source, PType dest_extype);
 	AllocaInst *create_entry_block_alloca(char *name, Type *type);

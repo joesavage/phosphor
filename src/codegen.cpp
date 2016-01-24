@@ -76,6 +76,31 @@ AllocaInst *CodeGenerator::create_entry_block_alloca(char *name, Type *type) {
 	return entry_builder.CreateAlloca(type, 0, name);
 }
 
+bool CodeGenerator::create_cast(PValue *source, PType dest_type) {
+	PBaseType *source_base = source->type.getBaseType();
+	PBaseType *dest_base = dest_type.getBaseType();
+	Type *source_llvm = source->type.getLLVMType();
+	Type *dest_llvm = dest_type.getLLVMType();
+
+	// We could easily create the cast instructions manually rather than
+	// relying on 'getCastOpcode' here if required (Trunc, ZExt/SExt, etc.).
+	if (CastInst::isCastable(source_llvm, dest_llvm)) {
+		source->type = dest_type;
+		auto cast_opcode = CastInst::getCastOpcode(source->llvmval,
+		                                           source_base->is_signed,
+		                                           dest_llvm,
+		                                           dest_base->is_signed);
+		source->llvmval = builder->CreateCast(cast_opcode,
+		                                      source->llvmval,
+		                                      dest_llvm);
+
+		assert(source->type.getLLVMType() == dest_type.getLLVMType());
+		assert(source->llvmval->getType() == dest_type.getLLVMType());
+		return true;
+	}
+	return false;
+}
+
 bool CodeGenerator::implicit_type_convert(PValue *source,
                                           PType dest_type)
 {
@@ -84,42 +109,37 @@ bool CodeGenerator::implicit_type_convert(PValue *source,
 
 	PBaseType *source_base = source->type.getBaseType();
 	PBaseType *dest_base = dest_type.getBaseType();
-	Type *source_llvm = source->type.getLLVMType();
-	Type *dest_llvm = dest_type.getLLVMType();
 
-	// For now, pointers and arrays don't do any implicit type conversion.
-	// TODO: One day, ptr to [] should implicitly convert to ptr to the first el.
-	if (source->type.flags & POINTER || dest_type.flags & POINTER
-	 || source->type.array_size || dest_type.array_size)
-		return false;
+	// Pointer to array -> pointer to first element
+	if (source->type.flags & POINTER) {
+		assert(source->type.indirect_type);
+		if (source->type.indirect_type->array_size && dest_type.flags & POINTER) {
+			assert(source->type.indirect_type->indirect_type);
+			assert(dest_type.indirect_type);
 
-	if (source_base->is_numeric && dest_base->is_numeric) {
-		// TODO: This big unwieldy condition can probably be simplified down!
-		if ((((source_base->is_signed == dest_base->is_signed
-		 && (!source_base->is_float))
-		 || (source_base->is_float && dest_base->is_float))
-		 && ((source_base->numbits <= dest_base->numbits)
-		 || (!source_base->is_float && dest_base->is_float)))
+			PType a = *dest_type.indirect_type;
+			PType b = *source->type.indirect_type->indirect_type;
+			if (a == b)
+				return create_cast(source, dest_type);
+		}
+	}
 
-		 // NOTE: unsigned->signed conversions are allowed if there is no possible
-		 // truncation. implicit signed->unsigned conversions are disallowed.
-		 || ((!source_base->is_signed && dest_base->is_signed)
-		 && (dest_base->numbits - 1 >= source_base->numbits))) {
-			// We could easily create the cast instructions manually rather than
-			// relying on 'getCastOpcode' here if required (Trunc, ZExt/SExt, etc.).
-			if (CastInst::isCastable(source_llvm, dest_llvm)) {
-				source->type = dest_type;
-				auto cast_opcode = CastInst::getCastOpcode(source->llvmval,
-				                                           source_base->is_signed,
-				                                           dest_llvm,
-				                                           dest_base->is_signed);
-				source->llvmval = builder->CreateCast(cast_opcode,
-				                                      source->llvmval,
-				                                      dest_llvm);
+	if (!(source->type.flags & POINTER) && !(dest_type.flags & POINTER) &&
+	    !source->type.array_size && !dest_type.array_size)
+	{
+		if (source_base->is_numeric && dest_base->is_numeric) {
+			// TODO: This big unwieldy condition can probably be simplified down!
+			if ((((source_base->is_signed == dest_base->is_signed
+			 && (!source_base->is_float))
+			 || (source_base->is_float && dest_base->is_float))
+			 && ((source_base->numbits <= dest_base->numbits)
+			 || (!source_base->is_float && dest_base->is_float)))
 
-				assert(source->type.getLLVMType() == dest_type.getLLVMType());
-				assert(source->llvmval->getType() == dest_type.getLLVMType());
-				return true;
+			 // NOTE: unsigned->signed conversions are allowed if there is no possible
+			 // truncation. implicit signed->unsigned conversions are disallowed.
+			 || ((!source_base->is_signed && dest_base->is_signed)
+			 && (dest_base->numbits - 1 >= source_base->numbits))) {
+				return create_cast(source, dest_type);
 			}
 		}
 	}
