@@ -79,8 +79,10 @@ bool HashMap<T>::set(const char *key, T value) {
 	if (!key || !size)
 		return false;
 
-	if (!buckets)
+	if (!buckets) {
 		buckets = (HashNode<T> *)heap_alloc(sizeof(HashNode<T>) * size);
+		memset(buckets, 0, sizeof(HashNode<T>) * size);
+	}
 
 	HashNode<T> node;
 	if (strlen(key) >= sizeof(node.key)) {

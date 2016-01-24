@@ -1,5 +1,5 @@
-putchar :: (ch: i32) -> i32;
-puts :: (ch: u8^) -> i32;
+putchar :: (ch: i32) -> i32
+puts :: (ch: u8^) -> i32
 
 main :: () -> i32 {
 	message: u8[0b101];

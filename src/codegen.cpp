@@ -59,6 +59,12 @@ PValue CodeGenerator::get_boolean_value(bool value) {
 }
 
 AllocaInst *CodeGenerator::create_entry_block_alloca(char *name, Type *type) {
+	if (!env->parent) {
+		// Global variables in LLVM are 'GlobalVariable's, not 'AllocaInst's...
+		fatal_error("global variables are currently not implemented.\n");
+		return NULL;
+	}
+
 	PFunction *function = lookup_function(env->current_function);
 	if (!function) {
 		fatal_error("invalid 'current' function for alloca creation\n");
@@ -82,6 +88,7 @@ bool CodeGenerator::implicit_type_convert(PValue *source,
 	Type *dest_llvm = dest_type.getLLVMType();
 
 	// For now, pointers and arrays don't do any implicit type conversion.
+	// TODO: One day, ptr to [] should implicitly convert to ptr to the first el.
 	if (source->type.flags & POINTER || dest_type.flags & POINTER
 	 || source->type.array_size || dest_type.array_size)
 		return false;
@@ -235,10 +242,11 @@ PVariable CodeGenerator::generate_lvalue(ASTNode *node, bool internal) {
 				if (error)
 					break;
 
-				if (!value.type.flags & POINTER) {
+				if (!(value.type.flags & POINTER)) {
 					set_error(pnode.operand, "cannot dereference non-pointer operand");
 					break;
 				}
+				assert(value.type.indirect_type);
 				result.type = *value.type.indirect_type;
 				result.llvmval = (AllocaInst *)value.llvmval;
 				break;
@@ -324,16 +332,11 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 
 			// Handle '[]' for array indexing.
 			// TODO: This should happen for both arr & ptr types.
-			//		TODO: But what about string array accesses? They're pointers to
-			//		arrays rather than pure arrays, which is problematic.
-			//		(Solutions: either don't globalise strings [avoid the ptr part],
-			//		 or store strings as ptrs rather than ptrs to arrs [avoid arr],
-			//		 or strings have operator overloading for '[]' which derefs).
+			//    Pointers to array types (including strings) should do pointer arith
+			//    on the type of their elements (rather than of the array itself), as
+			//    if they are just pointers to the first elements.
 			// TODO: Pointer array indexes are near identical to pointer arith, so the
 			// code for both should probably be combined.
-			// TODO: Strings should be indexed as UTF-8 some day (instead of per-byte)
-			// Since this requires operator overloading anyway, maybe the solution to
-			// the ptr to arr problem should be in overloading.
 			if (!strcmp(pnode.value, "[]")) {
 				PVariable value = generate_lvalue(node);
 				if (error)
@@ -388,7 +391,7 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 			// to numeric and pointer types only. Fix the structure of this!
 			PType type = left.type;
 			PBaseType *base_type = type.getBaseType();
-			if (!base_type->is_numeric && !type.flags & POINTER) {
+			if (!base_type->is_numeric && !(type.flags & POINTER)) {
 				set_error(pnode.right,
 				          "non-numeric type '%s' specified for binary operation",
 				          left.type.to_string());

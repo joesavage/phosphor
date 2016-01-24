@@ -27,6 +27,8 @@ private:
 	bool peek_token_type(PTokenType type, int offset = 0);
 	bool peek_token(PTokenType type, const char *value, int offset = 0);
 	ASTNode *create_node(ASTNodeType type);
+	ASTNode *create_node(ASTNodeType type, unsigned int line_no,
+	                     unsigned int col_no);
 	PToken *scan_token(PTokenType type, const char *value);
 	PToken *scan_token_type(PTokenType type);
 	bool scan_end_of_line();

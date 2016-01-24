@@ -91,7 +91,7 @@ ASTNode *Parser::parse_constant() {
 	// If we want char constants, they should go here too.
 	PToken *token = NULL;
 	if ((token = scan_token_type(TOKEN_INT))) {
-		result = create_node(NODE_CONSTANT_INT);
+		result = create_node(NODE_CONSTANT_INT, token->line_no, token->col_no);
 
 		if (str_to_size_t(token->value, &result->toInteger()->value)) {
 			if (!error)
@@ -99,22 +99,22 @@ ASTNode *Parser::parse_constant() {
 			return NULL;
 		}
 	} else if ((token = scan_token_type(TOKEN_FLOAT))) {
-		result = create_node(NODE_CONSTANT_FLOAT);
+		result = create_node(NODE_CONSTANT_FLOAT, token->line_no, token->col_no);
 		result->toString()->value = token->value;
 	} else if ((token = scan_token_type(TOKEN_STRING))) {
-		result = create_node(NODE_CONSTANT_STRING);
+		result = create_node(NODE_CONSTANT_STRING, token->line_no, token->col_no);
 		result->toString()->value = token->value;
-		if (strlen(token->value) <= 2) {
+		if (strlen(token->value) == 0) {
 			set_error("empty strings are not allowed");
 			return NULL;
 		}
 	} else if (peek_token(TOKEN_KEYWORD, "true")) {
 		++cursor;
-		result = create_node(NODE_CONSTANT_BOOL);
+		result = create_node(NODE_CONSTANT_BOOL, token->line_no, token->col_no);
 		result->toInteger()->value = 1;
 	} else if (peek_token(TOKEN_KEYWORD, "false")) {
 		++cursor;
-		result = create_node(NODE_CONSTANT_BOOL);
+		result = create_node(NODE_CONSTANT_BOOL, token->line_no, token->col_no);
 		result->toInteger()->value = 0;
 	}
 	
@@ -130,7 +130,8 @@ ASTNode *Parser::parse_identifier() {
 
 	PToken *identifier = scan_token_type(TOKEN_IDENTIFIER);
 	if (identifier) {
-		result = create_node(NODE_IDENTIFIER);
+		result = create_node(NODE_IDENTIFIER, identifier->line_no,
+		                     identifier->col_no);
 		result->toString()->value = identifier->value;
 	}
 
@@ -186,7 +187,7 @@ ASTNode *Parser::parse_type() {
 	PBaseType *pbasetype = search_for_type(*env, cursor->value);
 	if (!pbasetype)
 		return NULL;
-	result = create_node(NODE_TYPE);
+	result = create_node(NODE_TYPE, cursor->line_no, cursor->col_no);
 	result->toType()->value = PType(pbasetype);
 	scan_token_type(TOKEN_IDENTIFIER);
 
@@ -241,13 +242,12 @@ ASTNode *Parser::parse_type() {
 	return result;
 }
 
-ASTNode *Parser::create_node(ASTNodeType type) {
+ASTNode *Parser::create_node(ASTNodeType type, unsigned int line_no,
+                             unsigned int col_no) {
 	ASTNode *result = (ASTNode *)nodes.reserve(sizeof(ASTNode));
 	result->initialise(type);
-	if (!eof()) {
-		result->line_no = cursor->line_no;
-		result->col_no = cursor->col_no;
-	}
+	result->line_no = line_no;
+	result->col_no = col_no;
 	return result;
 }
 
@@ -264,14 +264,14 @@ ASTNode *Parser::parse_unary_operator() {
 	if (peek_unary_operator()) {
 		if (peek_token_type(TOKEN_OPERATOR)) {
 			PToken *op = scan_token_type(TOKEN_OPERATOR);
-			result = create_node(NODE_UNARY_OPERATOR);
+			result = create_node(NODE_UNARY_OPERATOR, op->line_no, op->col_no);
 			result->toUnaryOperator()->value = op->value;
 		} else { // It must be a cast!
 			assert(scan_token(TOKEN_RESERVED_PUNCTUATION, "("));
 			ASTNode *type = parse_type();
 			assert(type);
 			assert(scan_token(TOKEN_RESERVED_PUNCTUATION, ")"));
-			result = create_node(NODE_CAST_OPERATOR);
+			result = create_node(NODE_CAST_OPERATOR, type->line_no, type->col_no);
 			result->toCastOperator()->type = type->toType()->value;
 		}
 	}
@@ -289,7 +289,7 @@ ASTNode *Parser::parse_binary_operator() {
 
 	if (peek_binary_operator()) {
 		PToken *op = scan_token_type(TOKEN_OPERATOR);
-		result = create_node(NODE_BINARY_OPERATOR);
+		result = create_node(NODE_BINARY_OPERATOR, op->line_no, op->col_no);
 		result->toBinaryOperator()->value = op->value;
 	}
 
@@ -360,7 +360,8 @@ ASTNode *Parser::parse_atom() {
 		term = parse_identifier();
 		assert(term);
 		if (scan_token(TOKEN_RESERVED_PUNCTUATION, "(")) {
-			ASTNode *call = create_node(NODE_FUNCTION_CALL);
+			ASTNode *call = create_node(NODE_FUNCTION_CALL, cursor->line_no,
+			                            cursor->col_no);
 
 			if (!peek_token(TOKEN_RESERVED_PUNCTUATION, ")")) {
 				do {
@@ -388,6 +389,8 @@ ASTNode *Parser::parse_atom() {
 
 	if (peek_constant()) {
 		term = parse_constant();
+		if (error)
+			return NULL;
 		assert(term);
 		return result;
 	}
@@ -438,7 +441,9 @@ ASTNode *Parser::parse_expression(unsigned char minimum_precedence)
 			set_error("expected closing bracket for array index");
 			return NULL;
 		}
-		ASTNode *array_access = create_node(NODE_BINARY_OPERATOR);
+		ASTNode *array_access = create_node(NODE_BINARY_OPERATOR,
+		                                    array_index->line_no,
+		                                    array_index->col_no);
 		array_access->toBinaryOperator()->value = "[]";
 		array_access->toBinaryOperator()->left = result;
 		array_access->toBinaryOperator()->right = array_index;
@@ -447,7 +452,7 @@ ASTNode *Parser::parse_expression(unsigned char minimum_precedence)
 		
 
 	POperator operator_properties;
-	while (peek_binary_operator())
+	while (peek_binary_operator() && cursor[0].line_no == result->line_no)
 	{
 		POperator operator_properties = binary_operators[cursor[0].value]->value;
 		unsigned char precedence = operator_properties.precedence;
@@ -517,7 +522,8 @@ ASTNode *Parser::parse_constant_declaration() {
 		}
 		result = parse_function(name);
 	} else {
-		result = create_node(NODE_VARIABLE_DECLARATION);
+		result = create_node(NODE_VARIABLE_DECLARATION, cursor->line_no,
+		                     cursor->col_no);
 		result->toVariableDeclaration()->name = name;
 		result->toVariableDeclaration()->init = parse_expression();
 		result->toVariableDeclaration()->is_constant = true;
@@ -538,7 +544,8 @@ bool Parser::peek_variable_declaration() {
 }
 
 ASTNode *Parser::parse_variable_declaration() {
-	ASTNode *result = create_node(NODE_VARIABLE_DECLARATION);
+	ASTNode *result = create_node(NODE_VARIABLE_DECLARATION, cursor->line_no,
+	                              cursor->col_no);
 
 	if (peek_token_type(TOKEN_KEYWORD)) {
 		set_error("cannot declare variable with reserved keyword name");
@@ -588,11 +595,11 @@ ASTNode *Parser::parse_variable_declaration() {
 }
 
 ASTNode *Parser::parse_block() {
+	ASTNode *result = create_node(NODE_BLOCK, cursor->line_no, cursor->col_no);
 	if (!scan_token(TOKEN_RESERVED_PUNCTUATION, "{")) {
 		set_error("expected opening brace for block");
 		return NULL;
 	}
-	ASTNode *result = create_node(NODE_BLOCK);
 	set_environment(result, env);
 
 	Environment *prev_env = env;
@@ -624,9 +631,6 @@ bool Parser::peek_function() {
 			++nesting;
 		else if (peek_token(TOKEN_RESERVED_PUNCTUATION, ")", offset))
 			--nesting;
-		else if (!peek_token_type(TOKEN_IDENTIFIER, offset) &&
-		         !peek_token_type(TOKEN_OPERATOR, offset))
-			return false;
 
 		++offset;
 		if (offset == INT_MAX || nesting == INT_MAX)
@@ -643,7 +647,8 @@ bool Parser::peek_function() {
 }
 
 ASTNode *Parser::parse_function(ASTNode *function_name) {
-	ASTNode *signature = create_node(NODE_FUNCTION_SIGNATURE);
+	ASTNode *signature = create_node(NODE_FUNCTION_SIGNATURE, cursor->line_no,
+	                                 cursor->col_no);
 
 	signature->toFunctionSignature()->name = function_name;
 	set_environment(signature, env, function_name->toString()->value);
@@ -691,13 +696,14 @@ ASTNode *Parser::parse_function(ASTNode *function_name) {
 			set_error("invalid return type in function signature");
 		return NULL;
 	}
-	signature->toFunctionSignature()->type = return_type->toType()->value.base_type;
+	signature->toFunctionSignature()->type = return_type->toType()->value;
 
 	if (!peek_token(TOKEN_RESERVED_PUNCTUATION, "{")) {
 		env = prev_env;
 		return signature;
 	} else {
-		ASTNode *function = create_node(NODE_FUNCTION);
+		ASTNode *function = create_node(NODE_FUNCTION, signature->line_no,
+		                                signature->col_no);
 		function->toFunction()->signature = signature;
 		if (!function->toFunction()->signature || error)
 			return NULL;
@@ -716,12 +722,12 @@ ASTNode *Parser::parse_function(ASTNode *function_name) {
 }
 
 ASTNode *Parser::parse_if() {
+	ASTNode *result = create_node(NODE_IF, cursor->line_no, cursor->col_no);
 	if (!scan_token(TOKEN_KEYWORD, "if")) {
 		set_error("expected 'if' keyword for if statement");
 		return NULL;
 	}
 
-	ASTNode *result = create_node(NODE_IF);
 	result->toConditional()->condition = parse_expression();
 	if (!result->toConditional()->condition || error) {
 		if (!error)
@@ -752,12 +758,12 @@ ASTNode *Parser::parse_if() {
 }
 
 ASTNode *Parser::parse_loop() {
+	ASTNode *result = create_node(NODE_FOR_LOOP, cursor->line_no, cursor->col_no);
 	if (!scan_token(TOKEN_KEYWORD, "for")) {
 		set_error("expected 'for' keyword for 'for' loop");
 		return NULL;
 	}
 
-	ASTNode *result = create_node(NODE_FOR_LOOP);
 	result->toConditional()->condition = parse_expression();
 	if (!result->toConditional()->condition || error) {
 		if (!error)
@@ -787,12 +793,12 @@ ASTNode *Parser::parse_loop() {
 }
 
 ASTNode *Parser::parse_return() {
+	ASTNode *result = create_node(NODE_RETURN, cursor->line_no, cursor->col_no);
 	if (!scan_token(TOKEN_KEYWORD, "return")) {
 		set_error("expected 'return' keyword for return signature");
 		return NULL;
 	}
 
-	ASTNode *result = create_node(NODE_RETURN);
 	result->toUnaryOperator()->operand = parse_expression();
 	if (!result->toUnaryOperator()->operand) {
 		if (!error)
@@ -838,7 +844,8 @@ ASTNode *Parser::parse_statements() {
 			break;
 		
 		if (!result)
-			result = create_node(NODE_STATEMENTS);
+			result = create_node(NODE_STATEMENTS, statement->line_no,
+			                     statement->col_no);
 		
 		result->toStatements()->children.add(statement);
 
