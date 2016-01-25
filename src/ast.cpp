@@ -19,6 +19,9 @@ void ASTNode::initialise(ASTNodeType type) {
 			toVariableDeclaration()->init = NULL;
 			toVariableDeclaration()->is_constant = false;
 			break;
+		case NODE_ARRAY_INITIALIZATION:
+			toArrayInitialization()->elements = MemoryList<ASTNode *>();
+			break;
 		case NODE_IF:
 			toConditional()->condition = NULL;
 			toConditional()->then = NULL;
@@ -115,6 +118,11 @@ struct ASTNode::data::block *ASTNode::toBlock() {
 struct ASTNode::data::variable_declaration *ASTNode::toVariableDeclaration() {
 	assert(type == NODE_VARIABLE_DECLARATION);
 	return &this->data.variable_declaration;
+}
+struct ASTNode::data::array_initialization *ASTNode::toArrayInitialization()
+{
+	assert(type == NODE_ARRAY_INITIALIZATION);
+	return &this->data.array_initialization;
 }
 struct ASTNode::data::conditional *ASTNode::toConditional() {
 	assert(type == NODE_IF);

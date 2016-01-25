@@ -165,6 +165,7 @@ static void printf_ast(ASTNode *node, const char *prefix, size_t depth = 0) {
 			case NODE_FOR_LOOP:
 			case NODE_BREAK:
 			case NODE_CONTINUE:
+			case NODE_ARRAY_INITIALIZATION:
 			default:
 			{
 				fprintf(stderr, "%d\n", node->type);

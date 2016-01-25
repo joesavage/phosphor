@@ -74,6 +74,7 @@ Value *CodeGenerator::create_variable(char *name, Type *type, Value *init,
 		                                          GlobalValue::ExternalLinkage,
 		                                          0, name);
 		if (init) {
+			// TODO: Fix this. What if we want to initialize with other constants?
 			assert(isa<Constant>(init));
 			test->setInitializer((Constant *)init);
 		} else {
@@ -100,15 +101,19 @@ Value *CodeGenerator::create_variable(char *name, Type *type, Value *init,
 	return result;
 }
 
+bool CodeGenerator::can_cast(PType source_type, PType dest_type) {
+	return CastInst::isCastable(source_type.getLLVMType(),
+	                            dest_type.getLLVMType());
+}
+
 bool CodeGenerator::create_cast(PValue *source, PType dest_type) {
 	PBaseType *source_base = source->type.getBaseType();
 	PBaseType *dest_base = dest_type.getBaseType();
-	Type *source_llvm = source->type.getLLVMType();
 	Type *dest_llvm = dest_type.getLLVMType();
 
 	// We could easily create the cast instructions manually rather than
 	// relying on 'getCastOpcode' here if required (Trunc, ZExt/SExt, etc.).
-	if (CastInst::isCastable(source_llvm, dest_llvm)) {
+	if (can_cast(source->type, dest_type)) {
 		source->type = dest_type;
 		auto cast_opcode = CastInst::getCastOpcode(source->llvmval,
 		                                           source_base->is_signed,
@@ -125,38 +130,78 @@ bool CodeGenerator::create_cast(PValue *source, PType dest_type) {
 	return false;
 }
 
-bool CodeGenerator::implicit_type_convert(PValue *source,
-                                          PType dest_type)
-{
-	if (source->type == dest_type) {
-		source->type.flags &= ~MALLEABLE;
-		return true;
-	}
+bool CodeGenerator::can_promote_to_signed(PType type,
+                                          PType *target) {
+	if (type.base_type) {
+		if (type.base_type->is_signed) {
+			*target = type;
+			return true;
+		} else if ((type.flags & MALLEABLE) && !type.base_type->is_float &&
+		           type.base_type->is_numeric)
+		{
+			assert(type.flags & CONSTANT);
+			assert(type.bits_required);
 
-	PBaseType *source_base = source->type.getBaseType();
-	PBaseType *dest_base = dest_type.getBaseType();
+			unsigned int bits_required = type.bits_required + 1;
 
-	// Pointer to array -> pointer to first element
-	if (source->type.flags & POINTER) {
-		assert(source->type.indirect_type);
-		if (source->type.indirect_type->array_size && dest_type.flags & POINTER) {
-			assert(source->type.indirect_type->indirect_type);
-			assert(dest_type.indirect_type);
-
-			PType a = *dest_type.indirect_type;
-			PType b = *source->type.indirect_type->indirect_type;
-			if (a == b) {
-				if (create_cast(source, dest_type)) {
-					source->type.flags &= ~MALLEABLE;
-					return true;
-				}
-				return false;
+			PType result;
+			if (bits_required <= 8) {
+				result = PType(lookup_base_type("i8"));
+			} else if (bits_required <= 16) {
+				result = PType(lookup_base_type("i16"));
+			} else if (bits_required <= 32) {
+				result = PType(lookup_base_type("i32"));
+			} else if (bits_required <= 64) {
+				result = PType(lookup_base_type("i64"));
+			} else {
+				unreachable_code_path();
 			}
+			result.flags = type.flags;
+			result.bits_required = type.bits_required;
+			*target = result;
+			return true;
 		}
 	}
 
-	if (!(source->type.flags & POINTER) && !(dest_type.flags & POINTER) &&
-	    !source->type.array_size && !dest_type.array_size)
+	return false;
+}
+
+bool CodeGenerator::promote_to_signed(PValue *value) {
+	PType result_type;
+	if (can_promote_to_signed(value->type, &result_type)) {
+		assert(create_cast(value, result_type));
+		return true;
+	}
+
+	return false;
+}
+
+bool CodeGenerator::can_implicit_type_convert(PType source_type,
+                                              PType dest_type,
+                                              int *is_through_signed_promotion)
+{
+	if (source_type == dest_type)
+		return true;
+
+	PBaseType *source_base = source_type.base_type;
+	PBaseType *dest_base = dest_type.base_type;
+
+	// Pointer to array -> pointer to first element
+	if (source_type.flags & POINTER) {
+		assert(source_type.indirect_type);
+		if (source_type.indirect_type->array_size && dest_type.flags & POINTER) {
+			assert(source_type.indirect_type->indirect_type);
+			assert(dest_type.indirect_type);
+
+			PType a = *dest_type.indirect_type;
+			PType b = *source_type.indirect_type->indirect_type;
+			if (a == b && can_cast(source_type, dest_type))
+				return true;
+		}
+	}
+
+	if (!(source_type.flags & POINTER) && !(dest_type.flags & POINTER) &&
+	    !source_type.array_size && !dest_type.array_size)
 	{
 		if (source_base->is_numeric && dest_base->is_numeric) {
 			// TODO: This big unwieldy condition can probably be simplified down!
@@ -170,11 +215,79 @@ bool CodeGenerator::implicit_type_convert(PValue *source,
 			 // truncation. implicit signed->unsigned conversions are disallowed.
 			 || ((!source_base->is_signed && dest_base->is_signed)
 			 && (dest_base->numbits - 1 >= source_base->numbits))) {
-			 	if (create_cast(source, dest_type)) {
-					source->type.flags &= ~MALLEABLE;
+				if (can_cast(source_type, dest_type))
 					return true;
-			 	}
-			 	return false;
+			}
+		}
+
+		if (!source_base->is_signed &&
+		    can_promote_to_signed(source_type, &source_type))
+		{
+			if (is_through_signed_promotion)
+				*is_through_signed_promotion = true;
+			if (can_implicit_type_convert(source_type, dest_type))
+				return true;
+		}
+	}
+
+	return false;
+}
+
+bool CodeGenerator::implicit_type_convert(PValue *source,
+                                          PType dest_type,
+                                          bool maintain_malleability)
+{
+	int is_through_signed_promotion = 0;
+	if (can_implicit_type_convert(source->type, dest_type)) {
+		if (is_through_signed_promotion) {
+			assert(promote_to_signed(source));
+		}
+		if (source->type != dest_type) {
+			assert(create_cast(source, dest_type));
+		}
+		if (!maintain_malleability) {
+			source->type.flags &= ~MALLEABLE;
+		}
+		return true;
+	}
+
+	return false;
+}
+
+// TODO: Having to maintain both of these is annoying. It would be good to
+// combine them somehow, such that the 'convert' uses the 'can_' check to
+// operate.
+bool CodeGenerator::can_convert_to_shared_type(PType first,
+                                               PType second)
+{
+	return can_implicit_type_convert(first, second) ||
+	       can_implicit_type_convert(second, first) ||
+	       (first.base_type && second.base_type &&
+	       	first.base_type->is_signed != second.base_type->is_signed);
+}
+
+bool CodeGenerator::convert_to_shared_type(PValue *first, PValue *second) {
+	if (can_implicit_type_convert(first->type, second->type)) {
+		assert(implicit_type_convert(first, second->type, true));
+		return true;
+	} else if (can_implicit_type_convert(second->type, first->type)) {
+		assert(implicit_type_convert(second, first->type, true));
+		return true;
+	} else {
+		PType target;
+		if (can_promote_to_signed(second->type, &target) &&
+		    can_implicit_type_convert(first->type, target))
+		{
+			assert(promote_to_signed(second));
+			assert(implicit_type_convert(first, second->type, true));
+			return true;
+		} else {
+			if (can_promote_to_signed(first->type, &target) &&
+			    can_implicit_type_convert(second->type, target))
+			{
+				assert(promote_to_signed(first));
+				assert(implicit_type_convert(second, first->type, true));
+				return true;
 			}
 		}
 	}
@@ -190,8 +303,8 @@ bool CodeGenerator::explicit_type_convert(PValue *source,
 		return true;
 	}
 
-	PBaseType *source_base = source->type.getBaseType();
-	PBaseType *dest_base = dest_type.getBaseType();
+	PBaseType *source_base = source->type.base_type;
+	PBaseType *dest_base = dest_type.base_type;
 	Type *source_llvm = source->type.getLLVMType();
 	Type *dest_llvm = dest_type.getLLVMType();
 
@@ -247,6 +360,16 @@ PVariable CodeGenerator::generate_lvalue(ASTNode *node, bool internal) {
 						set_error(pnode.init, "type mismatch in variable initialization - "
 						          "expected '%s', got '%s'", variable_type.to_string(),
 					            value.type.to_string());
+						break;
+					}
+				} else if (variable_type.array_size && variable_type.indirect_type) {
+					if (variable_type.array_size != value.type.array_size) {
+						set_error(pnode.init, "expected array initializer with equal size");
+						break;
+					} else if (variable_type.indirect_type != value.type.indirect_type) {
+						set_error(pnode.init, "type mismatch in variable initialization - "
+						          "expected array initializer of '%s', got '%s'",
+						          variable_type.to_string(), value.type.to_string());
 						break;
 					}
 				} else { // Type inference
@@ -331,7 +454,7 @@ PVariable CodeGenerator::generate_lvalue(ASTNode *node, bool internal) {
 			auto pnode = *node->toBinaryOperator();
 
 			if (!strcmp(pnode.value, "[]")) {
-				PVariable left = generate_lvalue(pnode.left);
+				PVariable left = generate_lvalue(pnode.left, internal);
 				if (error)
 					break;
 
@@ -409,7 +532,7 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 			// TODO: Pointer array indexes are near identical to pointer arith, so the
 			// code for both should probably be combined.
 			if (!strcmp(pnode.value, "[]")) {
-				PVariable value = generate_lvalue(node);
+				PVariable value = generate_lvalue(node, true);
 				if (error)
 					break;
 				result.type = value.type;
@@ -618,31 +741,12 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 					break;
 				}
 
-				if (!base_type->is_float && !base_type->is_signed) {
-					if (!(value.type.flags & MALLEABLE)) {
-						set_error(node, "cannot negate unsigned value");
-						break;
-					} else {
-						assert(value.type.flags & CONSTANT);
-						assert(value.type.bits_required != 0);
-
-						if (value.type.bits_required <= 7) {
-							result.type = PType(lookup_base_type("i8"));
-						} else if (value.type.bits_required <= 15) {
-							result.type = PType(lookup_base_type("i16"));
-						} else if (value.type.bits_required <= 31) {
-							result.type = PType(lookup_base_type("i32"));
-						} else if (value.type.bits_required <= 63) {
-							result.type = PType(lookup_base_type("i64"));
-						} else {
-							unreachable_code_path();
-						}
-						result.type.flags = value.type.flags;
-						result.type.bits_required = value.type.bits_required;
-						assert(create_cast(&value, result.type));
-					}
+				if (!base_type->is_signed && !promote_to_signed(&value)) {
+					set_error(node, "cannot negate unsigned value");
+					break;
 				}
 
+				result.type = value.type;
 				result.llvmval = builder->CreateNeg(value.llvmval, "negatetmp");
 				break;
 			}
@@ -778,6 +882,68 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 			result.type = PType(NULL, 0, POINTER, 0, array_type);
 			result.llvmval = builder->CreateGlobalString(StringRef(str,
 			                                                       string_length));
+			break;
+		}
+		case NODE_ARRAY_INITIALIZATION:
+		{
+			auto pnode = *node->toArrayInitialization();
+
+			size_t element_count = pnode.elements.size();
+			assert(element_count);
+			result.type = PType();
+			result.type.array_size = element_count;
+			MemoryList<PValue> elements(element_count);
+			for (size_t i = 0; i < element_count; ++i) {
+				PValue el = generate_rvalue(pnode.elements[i]);
+				assert(el.type.flags & CONSTANT);
+				
+				if (el.type.flags & MALLEABLE) {
+					if (!result.type.indirect_type) {
+						result.type.indirect_type = (PType *)memory->reserve(sizeof(PType));
+						*result.type.indirect_type = el.type;
+					} else if (el.type != *result.type.indirect_type) {
+						if (!can_convert_to_shared_type(el.type,
+						                                *result.type.indirect_type))
+						{
+							set_error(node, "failed to add '%s' to '%s' array initializer",
+								          el.type.to_string(), result.type.to_string());
+							break;
+						}
+
+						assert(convert_to_shared_type(elements.getPointer(0), &el));
+						for (size_t j = 1; j < i; ++j) {
+							assert(implicit_type_convert(elements.getPointer(j), el.type));
+						}
+						*result.type.indirect_type = el.type;
+					}
+				}
+
+				if (el.type != *result.type.indirect_type) {
+					set_error(node, "type mismatch in array initializer - expected '%s'",
+					          "got '%s'", result.type.indirect_type->to_string(),
+					          el.type.to_string());
+					break;
+				}
+
+				elements.add(el);
+			}
+			printf("ARRAY TYPE: %s\n", result.type.to_string());
+			if (error)
+				break;
+
+			MemoryList<Constant *> llvm_elements(element_count);
+			for (size_t i = 0; i < element_count; ++i) {
+				assert(isa<Constant>(elements[i].llvmval));
+				llvm_elements.add((Constant *)elements[i].llvmval);
+			}
+
+			auto elements_arrayref = ArrayRef<Constant *>(llvm_elements.getPointer(0),
+			                                              element_count);
+			Type *result_type = result.type.getLLVMType();
+			// assert(isa<ArrayType *>(result_type));
+			result.llvmval = ConstantArray::get((ArrayType *)result_type,
+			                                    elements_arrayref);
+
 			break;
 		}
 		case NODE_IDENTIFIER:

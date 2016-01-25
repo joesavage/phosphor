@@ -32,9 +32,18 @@ private:
 	PFunction *lookup_function(const char *name);
 	PVariable *lookup_symbol(const char *name);
 	PValue get_boolean_value(bool value);
+	bool can_cast(PType source_type, PType dest_type);
 	bool create_cast(PValue *source, PType dest_type);
-	bool implicit_type_convert(PValue *source, PType dest_extype);
+
+	bool can_promote_to_signed(PType type, PType *target = NULL);
+	bool promote_to_signed(PValue *value);
+	bool can_implicit_type_convert(PType source_type, PType dest_type,
+	                               int *is_through_signed_promotion = NULL);
+	bool implicit_type_convert(PValue *source, PType dest_extype,
+	                           bool maintain_malleability = false);
 	bool explicit_type_convert(PValue *source, PType dest_extype);
+	bool can_convert_to_shared_type(PType first, PType second);
+	bool convert_to_shared_type(PValue *first, PValue *second);
 	Value *create_variable(char *name, Type *type, Value *init, bool constant);
 	void set_error(ASTNode *node, const char *format, ...);
 };

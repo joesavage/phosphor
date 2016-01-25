@@ -2,13 +2,13 @@ putchar :: (ch: u8) -> i32
 puts :: (ch: u8^) -> i32
 
 salutations :: () -> void
-some_constant :: 50;
-some_mutable_value: u8 = 39;
+array_initialization_works_now :: [255, 2, -9, 4]
+some_constant :: 0x5A
 
 main :: () -> i32 {
 	salutations()
-	some_mutable_value = some_mutable_value + 1;
-	putchar(some_constant + some_mutable_value);
+
+	putchar(some_constant);
 	putchar(10);
 
 	return 0
@@ -25,6 +25,6 @@ salutations :: () -> void {
 	for i: auto = 0, i < 5, i = i + 1 {
 		puts(&message)
 	}
-	
+
 	return
 }

@@ -495,6 +495,38 @@ ASTNode *Parser::parse_expression(unsigned char minimum_precedence)
 	return result;
 }
 
+bool Parser::peek_array_initialization() {
+	return peek_token(TOKEN_RESERVED_PUNCTUATION, "[");
+}
+
+ASTNode *Parser::parse_array_initialization() {
+	ASTNode *result = create_node(NODE_ARRAY_INITIALIZATION, cursor->line_no,
+	                              cursor->col_no);
+	if (!scan_token(TOKEN_RESERVED_PUNCTUATION, "[")) {
+		set_error("expected opening square bracket for array initialization");
+		return NULL;
+	}
+
+	if (!peek_token(TOKEN_RESERVED_PUNCTUATION, "]")) {
+		do {
+			ASTNode *element = parse_expression();
+			if (!element) {
+				if (!error)
+					set_error("invalid expression in array initialization");
+				return NULL;
+			}
+			result->toArrayInitialization()->elements.add(element);
+		} while (scan_token(TOKEN_RESERVED_PUNCTUATION, ","));
+	}
+
+	if (!scan_token(TOKEN_RESERVED_PUNCTUATION, "]")) {
+		set_error("expected closing square bracket after array initialization");
+		return NULL;
+	}
+
+	return result;
+}
+
 bool Parser::peek_constant_declaration() {
 	return peek_identifier() && peek_token(TOKEN_OPERATOR, "::", 1);
 }
@@ -530,7 +562,11 @@ ASTNode *Parser::parse_constant_declaration() {
 		result = create_node(NODE_VARIABLE_DECLARATION, cursor->line_no,
 		                     cursor->col_no);
 		result->toVariableDeclaration()->name = name;
-		result->toVariableDeclaration()->init = parse_expression();
+		if (peek_array_initialization()) {
+			result->toVariableDeclaration()->init = parse_array_initialization();
+		} else {
+			result->toVariableDeclaration()->init = parse_expression();
+		}
 		result->toVariableDeclaration()->is_constant = true;
 		if (!result->toVariableDeclaration()->init) {
 			if (!error)
@@ -585,7 +621,11 @@ ASTNode *Parser::parse_variable_declaration() {
 
 	// Handle assignment after declaration syntax (i.e. 'int32 a = 5')
 	if (scan_token(TOKEN_OPERATOR, "=")) {
-		result->toVariableDeclaration()->init = parse_expression();
+		if (peek_array_initialization()) {
+			result->toVariableDeclaration()->init = parse_array_initialization();
+		} else {
+			result->toVariableDeclaration()->init = parse_expression();
+		}
 		if (!result->toVariableDeclaration()->init) {
 			if (!error)
 				set_error("invalid expression for assignment");

@@ -8,6 +8,7 @@ enum ASTNodeType {
 	NODE_VOID,
 	NODE_STATEMENTS,
 	NODE_VARIABLE_DECLARATION,
+	NODE_ARRAY_INITIALIZATION,
 	NODE_IF,
 	NODE_FOR_LOOP,
 	NODE_BREAK,
@@ -65,6 +66,9 @@ class ASTNode {
 			ASTNode *init;
 			bool is_constant;
 		} variable_declaration;
+		struct array_initialization {
+			MemoryList<ASTNode *> elements;
+		} array_initialization;
 		struct conditional {
 			ASTNode *condition;
 			ASTNode *then;
@@ -113,6 +117,7 @@ public:
 	struct data::statements *toStatements();
 	struct data::block *toBlock();
 	struct data::variable_declaration *toVariableDeclaration();
+	struct data::array_initialization *toArrayInitialization();
 	struct data::conditional *toConditional();
 	struct data::for_loop *toForLoop();
 	struct data::function *toFunction();
