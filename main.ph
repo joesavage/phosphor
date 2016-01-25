@@ -1,14 +1,15 @@
-putchar :: (ch: i32) -> i32
+putchar :: (ch: u8) -> i32
 puts :: (ch: u8^) -> i32
 
-globals_work_now :: 0x5A
-
 salutations :: () -> void
+some_constant :: 50;
+some_mutable_value: u8 = 39;
 
 main :: () -> i32 {
-	putchar(globals_work_now)
-	putchar(10)
 	salutations()
+	some_mutable_value = some_mutable_value + 1;
+	putchar(some_constant + some_mutable_value);
+	putchar(10);
 
 	return 0
 }
@@ -21,7 +22,7 @@ salutations :: () -> void {
 	message[3] = 0b100001
 	message[4] = 0
 
-	for i: i32 = 0, i < 5, i = i + 1 {
+	for i: auto = 0, i < 5, i = i + 1 {
 		puts(&message)
 	}
 	

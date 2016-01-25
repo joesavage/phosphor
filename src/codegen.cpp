@@ -25,6 +25,14 @@ using namespace llvm;
 // TODO: At some point, we need to focus on quality of the LLVM IR generated.
 //       [COMPARE TO: $ clang -S -emit-llvm foo.c]
 
+static size_t get_bits_required(size_t value) {
+	size_t result = 1;
+	while (value >>= 1) {
+		++result;
+	}
+	return result;
+}
+
 void CodeGenerator::set_error(ASTNode *node, const char *format, ...) {
 	free(error);
 
@@ -120,8 +128,10 @@ bool CodeGenerator::create_cast(PValue *source, PType dest_type) {
 bool CodeGenerator::implicit_type_convert(PValue *source,
                                           PType dest_type)
 {
-	if (source->type == dest_type)
+	if (source->type == dest_type) {
+		source->type.flags &= ~MALLEABLE;
 		return true;
+	}
 
 	PBaseType *source_base = source->type.getBaseType();
 	PBaseType *dest_base = dest_type.getBaseType();
@@ -135,8 +145,13 @@ bool CodeGenerator::implicit_type_convert(PValue *source,
 
 			PType a = *dest_type.indirect_type;
 			PType b = *source->type.indirect_type->indirect_type;
-			if (a == b)
-				return create_cast(source, dest_type);
+			if (a == b) {
+				if (create_cast(source, dest_type)) {
+					source->type.flags &= ~MALLEABLE;
+					return true;
+				}
+				return false;
+			}
 		}
 	}
 
@@ -155,7 +170,11 @@ bool CodeGenerator::implicit_type_convert(PValue *source,
 			 // truncation. implicit signed->unsigned conversions are disallowed.
 			 || ((!source_base->is_signed && dest_base->is_signed)
 			 && (dest_base->numbits - 1 >= source_base->numbits))) {
-				return create_cast(source, dest_type);
+			 	if (create_cast(source, dest_type)) {
+					source->type.flags &= ~MALLEABLE;
+					return true;
+			 	}
+			 	return false;
 			}
 		}
 	}
@@ -166,8 +185,10 @@ bool CodeGenerator::implicit_type_convert(PValue *source,
 bool CodeGenerator::explicit_type_convert(PValue *source,
                                           PType dest_type)
 {
-	if (source->type == dest_type)
+	if (source->type == dest_type) {
+		source->type.flags &= ~MALLEABLE;
 		return true;
+	}
 
 	PBaseType *source_base = source->type.getBaseType();
 	PBaseType *dest_base = dest_type.getBaseType();
@@ -188,6 +209,7 @@ bool CodeGenerator::explicit_type_convert(PValue *source,
 
 		assert(source->type.getLLVMType() == dest_type.getLLVMType());
 		assert(source->llvmval->getType() == dest_type.getLLVMType());
+		source->type.flags &= ~MALLEABLE;
 		return true;
 	}
 
@@ -228,12 +250,29 @@ PVariable CodeGenerator::generate_lvalue(ASTNode *node, bool internal) {
 						break;
 					}
 				} else { // Type inference
-					// TODO: Maybe we want to do something with the type here.
-					// If we're using an 8-bit int literal, for example, we might want
-					// to actually declare the variable as 32-bits in size. Also,
-					// what if there's a '-' operator right before this literal? Then
-					// we should want this to become a signed type!
-					result.type = value.type;
+					if (!pnode.is_constant && value.type.flags & MALLEABLE) {
+						assert(value.type.flags & CONSTANT);
+						// Non-constant variables initalized to small integers infer to i32
+						// or u32 by default.
+						PBaseType *base_type = value.type.base_type;
+						if (base_type && base_type->is_numeric && !base_type->is_float &&
+						    base_type->numbits < 32) {
+							if (value.type.base_type->is_signed) {
+								result.type = PType(lookup_base_type("i32"));
+							} else {
+								result.type = PType(lookup_base_type("u32"));
+							}
+							assert(create_cast(&value, result.type));
+						} else {
+							result.type = value.type;
+							result.type.flags &= ~MALLEABLE;
+						}
+					} else {
+						// NOTE: The malleability carries over! When we implement function
+						// overloading, it needs to deal with potential ambiguity from
+						// malleable values (including constants).
+						result.type = value.type;
+					}
 				}
 			}
 			if (variable_type.base_type || variable_type.indirect_type)
@@ -538,9 +577,6 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 		{
 			auto pnode = *node->toUnaryOperator();
 
-			// TODO: What if we have an unsigned type negated by a unary operator?
-			// (Particularly, if we're negating an int literal)
-
 			if (!strcmp(pnode.value, "&")) {
 				// TODO: This check is weird. '&(arr[0])', for example, shouldn't fail here.
 				if (pnode.operand->type != NODE_IDENTIFIER) {
@@ -573,6 +609,41 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 				}
 
 				result = value;
+				break;
+			} else if (!strcmp(pnode.value, "-")) {
+				PValue value = generate_rvalue(pnode.operand);
+				PBaseType *base_type = value.type.base_type;
+				if (!base_type || !base_type->is_numeric) {
+					set_error(node, "'+' may only be used on numeric types");
+					break;
+				}
+
+				if (!base_type->is_float && !base_type->is_signed) {
+					if (!(value.type.flags & MALLEABLE)) {
+						set_error(node, "cannot negate unsigned value");
+						break;
+					} else {
+						assert(value.type.flags & CONSTANT);
+						assert(value.type.bits_required != 0);
+
+						if (value.type.bits_required <= 7) {
+							result.type = PType(lookup_base_type("i8"));
+						} else if (value.type.bits_required <= 15) {
+							result.type = PType(lookup_base_type("i16"));
+						} else if (value.type.bits_required <= 31) {
+							result.type = PType(lookup_base_type("i32"));
+						} else if (value.type.bits_required <= 63) {
+							result.type = PType(lookup_base_type("i64"));
+						} else {
+							unreachable_code_path();
+						}
+						result.type.flags = value.type.flags;
+						result.type.bits_required = value.type.bits_required;
+						assert(create_cast(&value, result.type));
+					}
+				}
+
+				result.llvmval = builder->CreateNeg(value.llvmval, "negatetmp");
 				break;
 			}
 
@@ -652,20 +723,24 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 
 			// Integer literals are unsigned by default, and are put into the smallest
 			// type they fit in.
-			int numbits = 0;
-			if (value <= 0xff) {
+			size_t bits_required = get_bits_required(value);
+			assert(bits_required <= UINT_MAX); // TODO: THE CAST, IT BURNS.
+			unsigned int numbits = 0;
+			if (bits_required <= 8) {
 				result.type = PType(lookup_base_type("u8"));
-			} else if (value <= 0xffff) {
+			} else if (bits_required <= 16) {
 				result.type = PType(lookup_base_type("u16"));
-			} else if (value <= 0xffffffff) {
+			} else if (bits_required <= 32) {
 				result.type = PType(lookup_base_type("u32"));
-			} else if (value <= 0xffffffffffffffff) {
+			} else if (bits_required <= 64) {
 				result.type = PType(lookup_base_type("u64"));
 			} else {
 				set_error(node, "integer literal too large");
 				break;
 			}
 			numbits = result.type.getBaseType()->numbits;
+			result.type.bits_required = (unsigned int)bits_required;
+			result.type.flags |= CONSTANT | MALLEABLE;
 
 			result.llvmval = ConstantInt::get(getGlobalContext(),
 			                                  APInt(numbits, value, false));
@@ -699,8 +774,8 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 			PType *byte_type = (PType *)memory->reserve(sizeof(PType));
 			*byte_type = PType(lookup_base_type("u8"));
 			PType *array_type = (PType *)memory->reserve(sizeof(PType));
-			*array_type = PType(NULL, EMPTY, string_length + 1, byte_type);
-			result.type = PType(NULL, POINTER, 0, array_type);
+			*array_type = PType(NULL, 0, EMPTY, string_length + 1, byte_type);
+			result.type = PType(NULL, 0, POINTER, 0, array_type);
 			result.llvmval = builder->CreateGlobalString(StringRef(str,
 			                                                       string_length));
 			break;

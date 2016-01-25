@@ -47,22 +47,27 @@ typedef uint_least32_t PTypeFlags;
 enum PTypeFlag {
 	EMPTY     = 0,
 	CONSTANT  = 1 << 0,
-	POINTER   = 1 << 1
+	MALLEABLE = 1 << 1,
+	POINTER   = 1 << 2
 };
 
 struct PType {
 	PBaseType *base_type; // TODO: We'll never use both of these at the same time
 	PType *indirect_type;
 
-	unsigned int array_size;
+	unsigned int bits_required; // Set for constants
+	// TODO: Move 'array_size = 0' to use 'flags' instead
+	unsigned int array_size; // Set for arrays
 	PTypeFlags flags;
 
-	PType(PBaseType *base_type = NULL, PTypeFlags flags = EMPTY,
-	      unsigned int array_size = 0, PType *indirect_type = NULL) {
+	PType(PBaseType *base_type = NULL, unsigned int bits_required = 0,
+	      PTypeFlags flags = EMPTY, unsigned int array_size = 0,
+	      PType *indirect_type = NULL) {
 		this->base_type = base_type;
 		this->flags = flags;
 		this->array_size = array_size;
 		this->indirect_type = indirect_type;
+		this->bits_required = 0;
 	}
 
 	Type *getLLVMType() {
@@ -78,11 +83,12 @@ struct PType {
 			result = base_type->llvmty;
 		}
 
-		// Other modifiers can go here
+		// TODO: Malleable, bits required.
 
 		return result;
 	}
 
+	// TODO: Is this actually useful? Looking back on the code, it feels wrong.
 	PBaseType *getBaseType() {
 		if (flags & POINTER || array_size > 0)
 			return indirect_type->getBaseType();
@@ -113,7 +119,7 @@ struct PType {
 			strncpy(result, base_type->name, buf_len);
 		}
 
-		// Can handle other modifiers here
+		// TODO: MALLEABLE
 
 		return result;
 	}

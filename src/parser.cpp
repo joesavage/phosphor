@@ -226,7 +226,7 @@ ASTNode *Parser::parse_type() {
 		// We could probably do some more efficient memory allocation here.
 		PType *old_ty = (PType *)memory->reserve(sizeof(PType));
 		*old_ty = result->toType()->value;
-		result->toType()->value = PType(NULL, EMPTY, array_size, old_ty);
+		result->toType()->value = PType(NULL, 0, EMPTY, array_size, old_ty);
 	}
 
 	if (cursor->value[0] == '^') {
@@ -236,7 +236,7 @@ ASTNode *Parser::parse_type() {
 				// We could probably do some more efficient memory allocation here.
 				PType *old_ty = (PType *)memory->reserve(sizeof(PType));
 				*old_ty = result->toType()->value;
-				result->toType()->value = PType(NULL, POINTER, 0, old_ty);
+				result->toType()->value = PType(NULL, 0, POINTER, 0, old_ty);
 			} else {
 				set_error("unexpected operator in variable declaration");
 				return NULL;
