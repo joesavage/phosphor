@@ -21,10 +21,8 @@ salutations :: () -> void {
 	message[3] = 0b100001
 	message[4] = 0
 
-	i: i32 = 0
-	for i < 5 {
+	for i: i32 = 0, i < 5, i = i + 1 {
 		puts(&message)
-		i = i + 1
 	}
 	
 	return

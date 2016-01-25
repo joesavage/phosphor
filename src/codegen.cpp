@@ -948,14 +948,23 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 		}
 		case NODE_FOR_LOOP:
 		{
-			auto pnode = *node->toConditional();
+			auto pnode = *node->toForLoop();
 			Function *function;
 			BasicBlock *preloop, *loop, *after;
 
+			Environment *previous_env = env;
+			assert(pnode.then && pnode.then->type == NODE_BLOCK);
+			env = pnode.then->toBlock()->env;
+
 			function = builder->GetInsertBlock()->getParent();
-			preloop = BasicBlock::Create(getGlobalContext(), "prewhile", function);
-			loop = BasicBlock::Create(getGlobalContext(), "while", function);
-			after = BasicBlock::Create(getGlobalContext(), "afterwhile", function);
+			preloop = BasicBlock::Create(getGlobalContext(), "prefor", function);
+			loop = BasicBlock::Create(getGlobalContext(), "for", function);
+			after = BasicBlock::Create(getGlobalContext(), "afterfor", function);
+			if (pnode.initialization) {
+				generate_statement(pnode.initialization);
+				if (error)
+					break;
+			}
 			builder->CreateBr(preloop);
 
 			builder->SetInsertPoint(preloop);
@@ -966,14 +975,14 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 
 			if (cond.type != true_val.type) {
 				set_error(pnode.condition,
-				          "unsupported type for while statement condition: %s",
+				          "unsupported type in for statement condition: %s",
 				          cond.type.to_string());
 				break;
 			}
 
 			cond.llvmval = builder->CreateICmpEQ(cond.llvmval,
 			                                     true_val.llvmval,
-			                                     "whilecond");
+			                                     "forcond");
 			builder->CreateCondBr(cond.llvmval, loop, after);
 
 			// TODO: Handle 'otherwise' branch (while..else)
@@ -982,8 +991,15 @@ void CodeGenerator::generate_statement(ASTNode *node) {
 			generate_statement(pnode.then);
 			if (error)
 				break;
+			if (pnode.update) {
+				generate_statement(pnode.update);
+				if (error)
+					break;
+			}
 			builder->CreateBr(preloop);
 			builder->SetInsertPoint(after);
+
+			env = previous_env;
 			break;
 		}
 		case NODE_RETURN:

@@ -70,6 +70,13 @@ class ASTNode {
 			ASTNode *then;
 			ASTNode *otherwise;
 		} conditional;
+		struct for_loop {
+			ASTNode *initialization;
+			ASTNode *condition;
+			ASTNode *update;
+			ASTNode *then;
+			ASTNode *otherwise;
+		} for_loop;
 		struct function {
 			ASTNode *signature;
 			ASTNode *body;
@@ -107,6 +114,7 @@ public:
 	struct data::block *toBlock();
 	struct data::variable_declaration *toVariableDeclaration();
 	struct data::conditional *toConditional();
+	struct data::for_loop *toForLoop();
 	struct data::function *toFunction();
 	struct data::function_signature *toFunctionSignature();
 	struct data::function_call *toFunctionCall();

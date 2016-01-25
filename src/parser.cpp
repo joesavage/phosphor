@@ -769,25 +769,62 @@ ASTNode *Parser::parse_loop() {
 		return NULL;
 	}
 
-	result->toConditional()->condition = parse_expression();
-	if (!result->toConditional()->condition || error) {
-		if (!error)
-			set_error("failed to parse expression in for loop");
-		return NULL;
+	bool three_section_loop = false;
+	ASTNode *first_section;
+	if (peek_variable_declaration() || peek_constant_declaration()) {
+		if (peek_constant_declaration()) {
+			first_section = parse_constant_declaration();
+		} else {
+			first_section = parse_variable_declaration();
+		}
+		if (!first_section || error) {
+			if (!error)
+				set_error("failed to parse declaration in for loop initialization");
+			return NULL;
+		}
+		three_section_loop = true;
+	} else {
+		first_section = parse_expression();
+		if (!first_section || error) {
+			if (!error)
+				set_error("failed to parse expression in for loop");
+			return NULL;
+		}
 	}
 
-	// TODO: Accept traditional for loops with three sections. Comma-separated.
+	if (!peek_token(TOKEN_RESERVED_PUNCTUATION, ",")) {
+		result->toForLoop()->condition = first_section;
+	} else {
+		result->toForLoop()->initialization = first_section;
+		assert(scan_token(TOKEN_RESERVED_PUNCTUATION, ","));
+		result->toForLoop()->condition = parse_expression();
+		if (!result->toForLoop()->condition || error) {
+			if (!error)
+				set_error("failed to parse condition expression in for loop");
+			return NULL;
+		}
+		if (!scan_token(TOKEN_RESERVED_PUNCTUATION, ",")) {
+			set_error("expected , in for loop");
+			return NULL;
+		}
+		result->toForLoop()->update = parse_statement();
+		if (!result->toForLoop()->update || error) {
+			if (!error)
+				set_error("failed to parse update expression in for loop");
+			return NULL;
+		}
+	}
 
-	result->toConditional()->then = parse_block();
-	if (!result->toConditional()->then || error) {
+	result->toForLoop()->then = parse_block();
+	if (!result->toForLoop()->then || error) {
 		if (!error)
 			set_error("failed to parse block in for loop");
 		return NULL;
 	}
 
 	if (scan_token(TOKEN_KEYWORD, "else")) {
-		result->toConditional()->otherwise = parse_block();
-		if (!result->toConditional()->otherwise || error) {
+		result->toForLoop()->otherwise = parse_block();
+		if (!result->toForLoop()->otherwise || error) {
 			if (!error)
 				set_error("failed to parse 'else' block in for loop");
 			return NULL;

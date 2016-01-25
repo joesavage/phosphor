@@ -20,10 +20,16 @@ void ASTNode::initialise(ASTNodeType type) {
 			toVariableDeclaration()->is_constant = false;
 			break;
 		case NODE_IF:
-		case NODE_FOR_LOOP:
 			toConditional()->condition = NULL;
 			toConditional()->then = NULL;
 			toConditional()->otherwise = NULL;
+			break;
+		case NODE_FOR_LOOP:
+			toForLoop()->initialization = NULL;
+			toForLoop()->condition = NULL;
+			toForLoop()->update = NULL;
+			toForLoop()->then = NULL;
+			toForLoop()->otherwise = NULL;
 			break;
 		case NODE_FUNCTION:
 			toFunction()->signature = NULL;
@@ -111,8 +117,12 @@ struct ASTNode::data::variable_declaration *ASTNode::toVariableDeclaration() {
 	return &this->data.variable_declaration;
 }
 struct ASTNode::data::conditional *ASTNode::toConditional() {
-	assert(type == NODE_IF || type == NODE_FOR_LOOP);
+	assert(type == NODE_IF);
 	return &this->data.conditional;
+}
+struct ASTNode::data::for_loop *ASTNode::toForLoop() {
+	assert(type == NODE_FOR_LOOP);
+	return &this->data.for_loop;
 }
 struct ASTNode::data::function *ASTNode::toFunction() {
 	assert(type == NODE_FUNCTION);
