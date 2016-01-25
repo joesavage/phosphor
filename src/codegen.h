@@ -12,6 +12,19 @@
 
 using namespace llvm;
 
+typedef enum {
+	NOTHING,
+	CAST,
+	CAST_AFTER_SIGNED_PROMOTION
+} implicit_type_convert_hint;
+
+typedef enum {
+	FIRST_IMPLICITLY_CASTS_TO_SECOND,
+	SECOND_IMPLICITLY_CASTS_TO_FIRST,
+	FIRST_IMPLICITLY_CASTS_TO_SIGNED_PROMOTED_SECOND,
+	SECOND_IMPLICITLY_CASTS_TO_SIGNED_PROMOTED_FIRST
+} shared_type_convert_hint;
+
 struct CodeGenerator {
 	ASTNode *root;
 	char *error;
@@ -38,11 +51,12 @@ private:
 	bool can_promote_to_signed(PType type, PType *target = NULL);
 	bool promote_to_signed(PValue *value);
 	bool can_implicit_type_convert(PType source_type, PType dest_type,
-	                               int *is_through_signed_promotion = NULL);
+	                               implicit_type_convert_hint *hint = NULL);
 	bool implicit_type_convert(PValue *source, PType dest_extype,
 	                           bool maintain_malleability = false);
 	bool explicit_type_convert(PValue *source, PType dest_extype);
-	bool can_convert_to_shared_type(PType first, PType second);
+	bool can_convert_to_shared_type(PType first, PType second,
+	                                shared_type_convert_hint *hint = NULL);
 	bool convert_to_shared_type(PValue *first, PValue *second);
 	Value *create_variable(char *name, Type *type, Value *init, bool constant);
 	void set_error(ASTNode *node, const char *format, ...);

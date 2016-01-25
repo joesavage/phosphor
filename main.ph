@@ -21,7 +21,6 @@ salutations :: () -> void {
 	message[2] = 0o171
 	message[3] = 0b100001
 	message[4] = 0
-
 	for i: auto = 0, i < 5, i = i + 1 {
 		puts(&message)
 	}

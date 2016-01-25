@@ -8,6 +8,7 @@ SOURCES=$(wildcard $(SRCDIR)/*.cpp)
 OBJECTS=$(SOURCES:$(SRCDIR)/%.cpp=$(DESTDIR)/%.o)
 
 # NOTE: These dependencies are probably wrong, so if in doubt about some weird error, try running 'clean' before building.
+# TODO: Make doesn't work how I thought, so none of the dependencies really work properly.
 
 phosphor: $(OBJECTS)
 	$(CC) $(LDFLAGS) -o phosphor $(OBJECTS) $(LDLIBS) 

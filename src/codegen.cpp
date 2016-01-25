@@ -178,10 +178,12 @@ bool CodeGenerator::promote_to_signed(PValue *value) {
 
 bool CodeGenerator::can_implicit_type_convert(PType source_type,
                                               PType dest_type,
-                                              int *is_through_signed_promotion)
+                                              implicit_type_convert_hint *hint)
 {
-	if (source_type == dest_type)
+	if (source_type == dest_type) {
+		if (hint) *hint = NOTHING;
 		return true;
+	}
 
 	PBaseType *source_base = source_type.base_type;
 	PBaseType *dest_base = dest_type.base_type;
@@ -195,8 +197,13 @@ bool CodeGenerator::can_implicit_type_convert(PType source_type,
 
 			PType a = *dest_type.indirect_type;
 			PType b = *source_type.indirect_type->indirect_type;
-			if (a == b && can_cast(source_type, dest_type))
+
+			// TODO: What about if we don't care about constancy or malleability,
+			// as we often/sometimes don't?
+			if (a == b && can_cast(source_type, dest_type)) {
+				if (hint) *hint = CAST;
 				return true;
+			}
 		}
 	}
 
@@ -216,17 +223,17 @@ bool CodeGenerator::can_implicit_type_convert(PType source_type,
 			 || ((!source_base->is_signed && dest_base->is_signed)
 			 && (dest_base->numbits - 1 >= source_base->numbits))) {
 				if (can_cast(source_type, dest_type))
+					if (hint) *hint = CAST;
 					return true;
 			}
 		}
 
 		if (!source_base->is_signed &&
-		    can_promote_to_signed(source_type, &source_type))
+		    can_promote_to_signed(source_type, &source_type) &&
+		    can_implicit_type_convert(source_type, dest_type))
 		{
-			if (is_through_signed_promotion)
-				*is_through_signed_promotion = true;
-			if (can_implicit_type_convert(source_type, dest_type))
-				return true;
+			if (hint) *hint = CAST_AFTER_SIGNED_PROMOTION;
+			return true;
 		}
 	}
 
@@ -237,59 +244,77 @@ bool CodeGenerator::implicit_type_convert(PValue *source,
                                           PType dest_type,
                                           bool maintain_malleability)
 {
-	int is_through_signed_promotion = 0;
-	if (can_implicit_type_convert(source->type, dest_type)) {
-		if (is_through_signed_promotion) {
-			assert(promote_to_signed(source));
+	implicit_type_convert_hint hint;
+	if (can_implicit_type_convert(source->type, dest_type, &hint)) {
+		switch (hint) {
+			case NOTHING:
+				break;
+			case CAST:
+				assert(create_cast(source, dest_type));
+				break;
+			case CAST_AFTER_SIGNED_PROMOTION:
+				assert(promote_to_signed(source));
+				assert(create_cast(source, dest_type));
+				break;
 		}
-		if (source->type != dest_type) {
-			assert(create_cast(source, dest_type));
-		}
-		if (!maintain_malleability) {
+
+		if (!maintain_malleability)
 			source->type.flags &= ~MALLEABLE;
-		}
 		return true;
 	}
 
 	return false;
 }
 
-// TODO: Having to maintain both of these is annoying. It would be good to
-// combine them somehow, such that the 'convert' uses the 'can_' check to
-// operate.
 bool CodeGenerator::can_convert_to_shared_type(PType first,
-                                               PType second)
+                                               PType second,
+                                               shared_type_convert_hint *hint)
 {
-	return can_implicit_type_convert(first, second) ||
-	       can_implicit_type_convert(second, first) ||
-	       (first.base_type && second.base_type &&
-	       	first.base_type->is_signed != second.base_type->is_signed);
-}
-
-bool CodeGenerator::convert_to_shared_type(PValue *first, PValue *second) {
-	if (can_implicit_type_convert(first->type, second->type)) {
-		assert(implicit_type_convert(first, second->type, true));
+	if (can_implicit_type_convert(first, second)) {
+		if (hint) *hint = FIRST_IMPLICITLY_CASTS_TO_SECOND;
 		return true;
-	} else if (can_implicit_type_convert(second->type, first->type)) {
-		assert(implicit_type_convert(second, first->type, true));
+	} else if (can_implicit_type_convert(second, first)) {
+		if (hint) *hint = SECOND_IMPLICITLY_CASTS_TO_FIRST;
 		return true;
 	} else {
 		PType target;
-		if (can_promote_to_signed(second->type, &target) &&
-		    can_implicit_type_convert(first->type, target))
+		if (can_promote_to_signed(second, &target) &&
+		    can_implicit_type_convert(first, target))
 		{
-			assert(promote_to_signed(second));
-			assert(implicit_type_convert(first, second->type, true));
+			if (hint) *hint = FIRST_IMPLICITLY_CASTS_TO_SIGNED_PROMOTED_SECOND;
 			return true;
-		} else {
-			if (can_promote_to_signed(first->type, &target) &&
-			    can_implicit_type_convert(second->type, target))
-			{
+		} else if (can_promote_to_signed(first, &target) &&
+			    can_implicit_type_convert(second, target))
+		{
+			if (hint) *hint = SECOND_IMPLICITLY_CASTS_TO_SIGNED_PROMOTED_FIRST;
+			return true;
+		}
+	}
+
+	return false;
+}
+
+bool CodeGenerator::convert_to_shared_type(PValue *first, PValue *second) {
+	shared_type_convert_hint hint;
+	if (can_convert_to_shared_type(first->type, second->type, &hint)) {
+		switch (hint) {
+			case FIRST_IMPLICITLY_CASTS_TO_SECOND:
+				assert(implicit_type_convert(first, second->type, true));
+				break;
+			case SECOND_IMPLICITLY_CASTS_TO_FIRST:
+				assert(implicit_type_convert(second, first->type, true));
+				break;
+			case FIRST_IMPLICITLY_CASTS_TO_SIGNED_PROMOTED_SECOND:
+				assert(promote_to_signed(second));
+				assert(implicit_type_convert(first, second->type, true));
+				break;
+			case SECOND_IMPLICITLY_CASTS_TO_SIGNED_PROMOTED_FIRST:
 				assert(promote_to_signed(first));
 				assert(implicit_type_convert(second, first->type, true));
-				return true;
-			}
+				break;
 		}
+
+		return true;
 	}
 
 	return false;
@@ -366,7 +391,9 @@ PVariable CodeGenerator::generate_lvalue(ASTNode *node, bool internal) {
 					if (variable_type.array_size != value.type.array_size) {
 						set_error(pnode.init, "expected array initializer with equal size");
 						break;
-					} else if (variable_type.indirect_type != value.type.indirect_type) {
+					} else if (variable_type != value.type) {
+						// TODO: The above should actually be more lenient, allowing for
+						// constant / non-constant matches, malleable / non-malleable, etc.
 						set_error(pnode.init, "type mismatch in variable initialization - "
 						          "expected array initializer of '%s', got '%s'",
 						          variable_type.to_string(), value.type.to_string());
@@ -927,7 +954,6 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 
 				elements.add(el);
 			}
-			printf("ARRAY TYPE: %s\n", result.type.to_string());
 			if (error)
 				break;
 
