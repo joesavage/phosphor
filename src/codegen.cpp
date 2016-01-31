@@ -198,8 +198,6 @@ bool CodeGenerator::can_implicit_type_convert(PType source_type,
 			PType a = *dest_type.indirect_type;
 			PType b = *source_type.indirect_type->indirect_type;
 
-			// TODO: What about if we don't care about constancy or malleability,
-			// as we often/sometimes don't?
 			if (a == b && can_cast(source_type, dest_type)) {
 				if (hint) *hint = CAST;
 				return true;
@@ -288,6 +286,17 @@ bool CodeGenerator::can_convert_to_shared_type(PType first,
 		{
 			if (hint) *hint = SECOND_IMPLICITLY_CASTS_TO_SIGNED_PROMOTED_FIRST;
 			return true;
+		} else if (first.flags & POINTER && second.flags & POINTER) {
+			assert(first.indirect_type && second.indirect_type);
+			if (first.indirect_type->array_size && second.indirect_type->array_size) {
+				assert(first.indirect_type->indirect_type &&
+				       second.indirect_type->indirect_type);
+				if (*first.indirect_type->indirect_type ==
+				    *second.indirect_type->indirect_type) {
+					if (hint) *hint = ARRAY_POINTERS_CAST_TO_FIRST_ELEMENT_POINTERS;
+					return true;
+				}
+			}
 		}
 	}
 
@@ -312,6 +321,16 @@ bool CodeGenerator::convert_to_shared_type(PValue *first, PValue *second) {
 				assert(promote_to_signed(first));
 				assert(implicit_type_convert(second, first->type, true));
 				break;
+			case ARRAY_POINTERS_CAST_TO_FIRST_ELEMENT_POINTERS:
+			{
+				assert(first->type.indirect_type);
+				PType target_type = *first->type.indirect_type;
+				target_type.array_size = 0;
+				target_type.flags |= POINTER;
+				assert(implicit_type_convert(first, target_type));
+				assert(implicit_type_convert(second, target_type));
+				break;
+			}
 		}
 
 		return true;
@@ -909,7 +928,7 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 			*byte_type = PType(lookup_base_type("u8"));
 			PType *array_type = (PType *)memory->reserve(sizeof(PType));
 			*array_type = PType(NULL, 0, EMPTY, string_length + 1, byte_type);
-			result.type = PType(NULL, 0, POINTER, 0, array_type);
+			result.type = PType(NULL, 0, POINTER | CONSTANT, 0, array_type);
 			result.llvmval = builder->CreateGlobalString(StringRef(str,
 			                                                       string_length));
 			break;
@@ -922,37 +941,32 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 			assert(element_count);
 			result.type = PType();
 			result.type.array_size = element_count;
+			result.type.flags |= CONSTANT | MALLEABLE;
 			MemoryList<PValue> elements(element_count);
 			for (size_t i = 0; i < element_count; ++i) {
 				PValue el = generate_rvalue(pnode.elements[i]);
 				assert(el.type.flags & CONSTANT);
 				
-				if (el.type.flags & MALLEABLE) {
-					if (!result.type.indirect_type) {
-						result.type.indirect_type = (PType *)memory->reserve(sizeof(PType));
-						*result.type.indirect_type = el.type;
-					} else if (el.type != *result.type.indirect_type) {
-						if (!can_convert_to_shared_type(el.type,
-						                                *result.type.indirect_type))
-						{
-							set_error(node, "failed to add '%s' to '%s' array initializer",
-								          el.type.to_string(), result.type.to_string());
-							break;
-						}
-
-						assert(convert_to_shared_type(elements.getPointer(0), &el));
-						for (size_t j = 1; j < i; ++j) {
-							assert(implicit_type_convert(elements.getPointer(j), el.type));
-						}
-						*result.type.indirect_type = el.type;
-					}
+				if (!result.type.indirect_type) {
+					result.type.indirect_type = (PType *)memory->reserve(sizeof(PType));
+					*result.type.indirect_type = el.type;
 				}
 
 				if (el.type != *result.type.indirect_type) {
-					set_error(node, "type mismatch in array initializer - expected '%s'",
-					          "got '%s'", result.type.indirect_type->to_string(),
-					          el.type.to_string());
-					break;
+					if (!can_convert_to_shared_type(el.type,
+					                                *result.type.indirect_type))
+					{
+						set_error(node, "type mismatch in array initializer - expected '%s'"
+						          "got '%s'", result.type.indirect_type->to_string(),
+						          el.type.to_string());
+						break;
+					}
+
+					assert(convert_to_shared_type(elements.getPointer(0), &el));
+					for (size_t j = 1; j < i; ++j) {
+						assert(implicit_type_convert(elements.getPointer(j), el.type));
+					}
+					*result.type.indirect_type = el.type;
 				}
 
 				elements.add(el);
@@ -971,6 +985,7 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 			result.type.indirect_type->flags &= ~(CONSTANT | MALLEABLE);
 			Type *result_type = result.type.getLLVMType();
 			// assert(isa<ArrayType *>(result_type));
+			assert(elements[0].type.getLLVMType() == result.type.indirect_type->getLLVMType());
 			result.llvmval = ConstantArray::get((ArrayType *)result_type,
 			                                    elements_arrayref);
 

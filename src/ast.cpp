@@ -50,13 +50,13 @@ void ASTNode::initialise(ASTNodeType type) {
 			break;
 		case NODE_BREAK:
 		case NODE_CONTINUE:
-		case NODE_RETURN:
 			break;
 		case NODE_CAST_OPERATOR:
 			toCastOperator()->type = PType();
 			toCastOperator()->operand = NULL;
 			break;
 		case NODE_UNARY_OPERATOR:
+		case NODE_RETURN:
 			toUnaryOperator()->value = NULL;
 			toUnaryOperator()->operand = NULL;
 			break;
