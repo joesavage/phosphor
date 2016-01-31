@@ -388,12 +388,15 @@ PVariable CodeGenerator::generate_lvalue(ASTNode *node, bool internal) {
 						break;
 					}
 				} else if (variable_type.array_size && variable_type.indirect_type) {
+					// Initialization uses loaded copies, and so knocks out constancy and
+					// malleability.
+					value.type.flags &= ~(CONSTANT | MALLEABLE);
 					if (variable_type.array_size != value.type.array_size) {
 						set_error(pnode.init, "expected array initializer with equal size");
 						break;
-					} else if (variable_type != value.type) {
-						// TODO: The above should actually be more lenient, allowing for
-						// constant / non-constant matches, malleable / non-malleable, etc.
+					} else if (!implicit_type_convert(&value, variable_type)) {
+						// TODO: implicit_type_convert needs to know more about changing
+						// array types (e.g. converting a u8[] to an i32[]).
 						set_error(pnode.init, "type mismatch in variable initialization - "
 						          "expected array initializer of '%s', got '%s'",
 						          variable_type.to_string(), value.type.to_string());
@@ -415,7 +418,7 @@ PVariable CodeGenerator::generate_lvalue(ASTNode *node, bool internal) {
 							assert(create_cast(&value, result.type));
 						} else {
 							result.type = value.type;
-							result.type.flags &= ~MALLEABLE;
+							result.type.flags &= ~(CONSTANT | MALLEABLE);
 						}
 					} else {
 						// NOTE: The malleability carries over! When we implement function
@@ -965,6 +968,7 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 
 			auto elements_arrayref = ArrayRef<Constant *>(llvm_elements.getPointer(0),
 			                                              element_count);
+			result.type.indirect_type->flags &= ~(CONSTANT | MALLEABLE);
 			Type *result_type = result.type.getLLVMType();
 			// assert(isa<ArrayType *>(result_type));
 			result.llvmval = ConstantArray::get((ArrayType *)result_type,
