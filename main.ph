@@ -3,6 +3,8 @@ puts :: (ch: u8^) -> i32
 
 salutations :: () -> void
 
+test :: "Hello"
+
 main :: () -> i32 {
 	salutations()
 

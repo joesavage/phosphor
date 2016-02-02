@@ -929,8 +929,22 @@ PValue CodeGenerator::generate_rvalue(ASTNode *node) {
 			PType *array_type = (PType *)memory->reserve(sizeof(PType));
 			*array_type = PType(NULL, 0, EMPTY, string_length + 1, byte_type);
 			result.type = PType(NULL, 0, POINTER | CONSTANT, 0, array_type);
-			result.llvmval = builder->CreateGlobalString(StringRef(str,
-			                                                       string_length));
+
+			// As IRBuilder's CreateGlobalString doesn't work without a BB insert
+			// point, we do this ourselves. See:
+			// http://llvm.org/docs/doxygen/html/IRBuilder_8cpp_source.html#l00027
+			StringRef str_ref = StringRef(str, string_length);
+			Constant *str_constant = ConstantDataArray::getString(getGlobalContext(),
+			                                                      str_ref);
+			// TODO: GlobalValue::PrivateLinkage? NotThreadLocal?
+			GlobalVariable *gv = new GlobalVariable(*module, str_constant->getType(),
+			                                        true,
+			                                        GlobalValue::ExternalLinkage,
+			                                        str_constant, "", NULL,
+			                                        GlobalVariable::NotThreadLocal,
+			                                        0);
+			gv->setUnnamedAddr(true);
+			result.llvmval = gv;
 			break;
 		}
 		case NODE_ARRAY_INITIALIZATION:
