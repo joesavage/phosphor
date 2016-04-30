@@ -2,20 +2,25 @@
  * Phosphor is a compiled statically-typed programming language.
  * This concept file outlines the direction the language is heading in.
  * 
- * NOTES:
- *   - Semicolons are mostly optional.
+ * Additional notes and extra tidbits (in no particular order):
+ *   - All syntax in this file is hugely non-final!
  *   - Operator overloading exists, I'm just not sure about the syntax yet.
+ *   - Eventually, I want the compiler to have /really good/ warnings and errors, and to also make it really easy to offer similar behaviour to clang's sanitizers.
+ *   - Multiple return values probably exist (particularly, I'm very fond of the pattern of returning a 'cleanup' lamda/closure which can be defer'd to free allocated memory).
  *   - 'struct' and 'union' packing keywords should be available.
  *   - Natural size types (like C's) might be useful, but I'm unsure.
  *     - Are default 'i32' etc. minimum-size or exact-size? Exact-size can be useful in structs, but minimum-size seems more useful for the general case.
- *   - Named parameters and named struct member initialization (and assignment?) would be nice.
- *   - Some good mechanisms for creating & handling parallelism would be nice, but I don't want to think about them quite yet.
+ *   - Named parameters and named struct member initialization (and assignment?) might be nice. What about named return values? (return implicit struct?)
+ *   - Some good mechanisms for creating & handling parallelism would be great, but I don't want to think about them quite yet.
  *   - Better abstractions for SIMD than C (i.e. using intrinsics) would be good.
- *   - Some kind of variable immutability might be a good idea, but I have mixed feelings about how to implement this.
+ *   - Immutability in some form should be present, but I'm unsure of the specifics.
+ *   - Some useful datatypes (inc. hashmap) should be baked into the language or STL for easy, efficient usage. I'm not sure which datatypes belong where though.
  *   - An easy way to switch from AoS to SoA would be great, but I'm unsure of the specifics. I don't want to think about it right now.
  *     - The compiler could implement this for static arrays (arrays of structs are secretly structs of arrays under the hood).
  *       - e.g. arr[5].item -> arr.item[5]
- *     - With powerful compile-time introspective branching and '.' overload ability (MOP-style), STL types could implement this without worry. Unsure if this is a good solution though.
+ *     - If there's built-in support for dynamic arrays too (with custom allocator support for flexibility), this could be handled in the dynamic case also.
+ *   - Strict aliasing is annoying, but useful for optimisations. I want to try and do something about that.
+ *   - Using optionals rather than a NULL value seems a sensible decision.
  */
 
 #import "filename.ph"
