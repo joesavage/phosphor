@@ -6,7 +6,17 @@
  *   - All syntax in this file is hugely non-final!
  *   - Eventually, I want the compiler to have really great warnings and errors
  *     - I would also like to make it really easy to offer similar behaviour to clang's sanitizers
- *   - Built-in types like 'Int' abide to certain protocols (similar to Ord, Num, etc. in Haskell)
+ *   - Built-in types like 'Int' may abide to certain protocols (similar to Ord, Num, etc. in Haskell)
+ *   - Non-type struct specialisation/variations may be supported too, e.g. a struct which takes an array length parameter
+ *     - We should also have some way to query these 'struct parameters', e.g. add_to_hashmap :: (table: $T<HashMap>, key: T.key_type, value: T.value_type)
+ *     - This could be in the form of general compile-time struct parameters (making structs a bit like functions/macros), but it feels more natural to use $ and <> to me
+ *       - Perhaps this can work its way into the constraint syntax somehow. e.g. Vector :: struct { arr: [N] Float32 } where N : Int64 // Vector<N: 10> vec
+ *   - "First-class" types should also be supported in some form as a purely compile-time construct (no runtime type madness, no synthesis, just passing around types)
+ *     - This is useful in, for example, compile-time macros that create objects of a provided type for you and do something with them, or to automate specific cast patterns
+ *   - A mechanism to switch between AoS to SoA will be supported (very common, yet a huge pain to deal with in C++)
+ *     - The compiler could implement this for static arrays (AoS are secretly SoA under the hood), e.g. arr[5].item -> arr.item[5]
+ *     - If there's built-in support for dynamic arrays too (with custom allocator support for flexibility), this could be handled in the dynamic case also.
+ *       - This seems like the 'right' solution, and would make it really easy to do the right thing.
  *   - Operator overloading is a feature, I'm just not sure about the syntax yet
  *     - It might be nice to be able to define operators with non-strict semantics too (just like && and || are)
  *     - It might also be nice to be able to define statement operators
@@ -16,7 +26,7 @@
  *     - Named return values might be convenient (perhaps functions can return implicitly defined structs or something)
  *   - Named struct member initialization (and potentially assignment) will be present, but I'm unsure of the syntax
  *     - Similarly, named parameters may be useful.
- *   - Some kind of introspection (inc. RTTI) will be supported
+ *   - Further introspection features will be supported
  *   - The language will have some good constructs for concurrency and parallism at some point too (inspired by Go, Rust, OpenCL, CUDA?)
  *     - In a similar light, it would be nice to have a better abstraction for SIMD than basic intrinsics
  *   - Is protocol inheritance something we want in the language? Potentially, I'm not sure right now
@@ -27,6 +37,7 @@
  *       - Particularly in the case where users aren't using contexts but they're still getting passed around!
  *     - The side-effects of functions in pre-compiled code should be clear too, so the calling program doesn't have to assume all data has changed
  *       - Alternatively, we take the compilation performance hit in compiling the appropriate STL functions with a source program (inlining benefits, etc.)
+ *   - Nested structs and struct-local constants should probably be supported, interacting properly with polymorphic structs (in creating a parent, give any type dependencies)
  *   - Using optionals rather than a NULL value seems a sensible decision.
  *   - Literals for both UTF-8 strings and ASCII byte strings should probably be present (e.g. b"string" or something)
  *   - Natural size types (similar to C's) might be useful, but I'm unsure
@@ -35,9 +46,6 @@
  *   - Basic 'struct' and 'union' packing keywords will be supported
  *   - For bit-level manipulation, perhaps a bitwise addressing construct could be useful (and cleaner than masking, unions, etc. in C)
  *   - Useful datatypes (inc. hashmap) should be baked into the language or STL for easy, efficient usage. I'm not sure which datatypes belong where though.
- *   - Some mechanism to switch between AoS to SoA would be great, but I'm unsure of the specifics
- *     - The compiler could implement this for static arrays (AoS are secretly SoA under the hood), e.g. arr[5].item -> arr.item[5]
- *     - If there's built-in support for dynamic arrays too (with custom allocator support for flexibility), this could be handled in the dynamic case also.
  */
 
 @import "filename.ph"
@@ -47,15 +55,15 @@
 main :: (argc: Int32, argv: &UInt8[]) -> Int32 {
 	with std // Brings the namespace 'std' into the local scope.
 
-	// Type inference! UTF-8 strings! String interpolation!
-	some_string := "Hello, World! (你好世界)\n"
+	// Type inference, UTF-8 strings, string interpolation.
+	some_string: Auto = "Hello, World! (你好世界)\n"
 	println("\"@{some_string}\", said the man.")
 
 	// Variables can explicitly be declared as uninitialized using '???'.
 	circle: Circle = ???
 	circle.pos.x = circle.pos.y = 42
 	circle.radius = 5
-	for i := 0, i < 100, ++i {
+	for i: Auto = 0, i < 100, ++i {
 		print_area(circle)
 		println("@{cast<Float32>(i)}")
 	}
@@ -125,7 +133,7 @@ main :: (argc: Int32, argv: &UInt8[]) -> Int32 {
 	{ ... } // Anonymous Block
 	[capture] { ... } // Captured Anonymous Block
 	(i: Int32) -> Float32 [capture] { ... } // Anonymous Closure
-	f := (i: Int32) -> Float32 [capture] { ... } // Named (Local/Global) Closure
+	f: Auto = (i: Int32) -> Float32 [capture] { ... } // Named (Local/Global) Closure
 	g :: (i: Int32) -> Float32 [capture] { ... } // Const Named (Local/Global) Closure
 
 	// This results in an error, as local closures can't be overloaded in the
@@ -196,7 +204,7 @@ main :: (argc: Int32, argv: &UInt8[]) -> Int32 {
 	// must be of the TaggedUnion.SpecificType type, and must be called within the
 	// 'case'. Note that the construction syntax here is very much still to be
 	// determined and is not final (named member construction would be better).
-	object := TaggedUnion.SecondType(some_circle)
+	object: Auto = TaggedUnion.SecondType(some_circle)
 
 	// This is allowed in this case as the specialised type is known. It would not
 	// be allowed if it was passed into another function accepting a TaggedUnion
@@ -223,8 +231,10 @@ main :: (argc: Int32, argv: &UInt8[]) -> Int32 {
 	something: HasArea = circle
 	println(area(something))
 
-	// You can match on the specific types of interface types too!
-	match something {
+	// You can match on the specific types of interface types, and the more
+	// specific types of base objects (e.g. through 'with' "inheritance"), using
+	// RTTI.
+	match something.type {
 		case _ => println("!")
 	}
 
@@ -249,6 +259,8 @@ std :: namespace {
 	// type may be specified in triangular brackets (in this case, a protocol
 	// constraint has been applied). Functions with generic type parameters go
 	// through monomorphisation, and are statically dispatched where possible.
+	// Polymorphic type constraints can also require that the parameter is a
+	// version of some struct (e.g. is a Pair<T>).
 	print_area :: (shape: $T<HasArea>) {
 		// Function calls can be forced as 'inline' from the call site.
 		println("This shape has area @{inline area(shape)}")
@@ -304,9 +316,11 @@ std :: namespace {
 		return a + 1
 	}
 
-	// 'b' is an autobaked function parameter (must be a constant or compile-time
-	// expression), so the compiler will generate specialised versions of the
-	// function for different values of 'b'.
+	// 'b' is an autobaked function parameter, so the compiler will generate
+	// specialised versions of the function for different values of 'b', or fall
+	// back to a generic version if the value is not known at compile-time.
+	// Stricter autobake functionality can use '@@', allowing only for constant or
+	// compile-time expressions as parameters.
 	some_func :: (a: Int32, b: @Int32) {
 		return a + b
 	}
