@@ -31,6 +31,9 @@
  *     - In a similar light, it would be nice to have a better abstraction for SIMD than basic intrinsics
  *   - Is protocol inheritance something we want in the language? Potentially, I'm not sure right now
  *   - Strict aliasing is annoying, but useful for optimisations. I want to try and do something about that.
+ *     - Also with regards to optimisation, perhaps 'for' loops should be more constrained to allow optimising on the iteration number without exploiting signed overflow
+ *       - e.g. "for(int i = A; i <= B; i += 4)" may be infinite if integer overflow is defined, which is clearly problematic
+ *       - In general, maybe the language constructs should be more constrained for this same purpose (we want to make things easy for the optimiser, somewhat unlike C)
  *   - Function boundaries to pre-compiled code are going to be a bit of a pain, tooling infrastructure changes may be required for things to work smoothly
  *     - The fact that optimisation is so terrible over function boundaries in C is really bad, so we should try to fix that.
  *     - Part of this is that we want contexts (which may include allocator information, etc.) to be essentially 'free' in as many cases as possible
