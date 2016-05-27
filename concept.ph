@@ -3,16 +3,19 @@
  * This concept file outlines the direction the language is heading in.
  * 
  * Additional notes and extra tidbits (in no particular order):
- *   - All syntax in this file is hugely non-final!
- *   - Eventually, I want the compiler to have really great warnings and errors
+ *   - All syntax (and, indeed, semantics) in this file is hugely non-final!
+ *   - Eventually, I want the compiler to have really great warnings and errors (see: Elm's amazing errors)
  *     - I would also like to make it really easy to offer similar behaviour to clang's sanitizers
  *   - Built-in types like 'Int' may abide to certain protocols (similar to Ord, Num, etc. in Haskell)
- *   - Non-type struct specialisation/variations may be supported too, e.g. a struct which takes an array length parameter
- *     - We should also have some way to query these 'struct parameters', e.g. add_to_hashmap :: (table: $T<HashMap>, key: T.key_type, value: T.value_type)
- *     - This could be in the form of general compile-time struct parameters (making structs a bit like functions/macros), but it feels more natural to use $ and <> to me
+ *   - Non-type struct specialisation/variations may be supported, e.g. a struct which takes an array length parameter
+ *     - We should also have some way to query 'struct parameters' in general
+ *       - e.g. add_to_hashmap :: (table: $T<HashMap>, key: T.key_type, value: T.value_type)
+ *     - This could be in the form of general compile-time struct parameters (making structs a bit like functions/macros)
+ *       - It feels more natural to use $ and <> to me though
  *       - Perhaps this can work its way into the constraint syntax somehow. e.g. Vector :: struct { arr: [N] Float32 } where N : Int64 // Vector<N: 10> vec
- *   - "First-class" types should also be supported in some form as a purely compile-time construct (no runtime type madness, no synthesis, just passing around types)
- *     - This is useful in, for example, compile-time macros that create objects of a provided type for you and do something with them, or to automate specific cast patterns
+ *   - "First-class" types should be supported in some form as a purely compile-time construct (no runtime madness, no synthesis, just passing around types)
+ *     - e.g. compile-time macros that create objects of a provided type for you and do something with them, or to automate specific cast patterns
+ *   - Some convenient way of creating enums with specific value patterns (e.g. bitmasks) should be supported, e.g. via macros or similar to Go's 'iota'
  *   - A mechanism to switch between AoS to SoA will be supported (very common, yet a huge pain to deal with in C++)
  *     - The compiler could implement this for static arrays (AoS are secretly SoA under the hood), e.g. arr[5].item -> arr.item[5]
  *     - If there's built-in support for dynamic arrays too (with custom allocator support for flexibility), this could be handled in the dynamic case also.
@@ -29,11 +32,12 @@
  *   - Further introspection features will be supported
  *   - The language will have some good constructs for concurrency and parallism at some point too (inspired by Go, Rust, OpenCL, CUDA?)
  *     - In a similar light, it would be nice to have a better abstraction for SIMD than basic intrinsics
- *   - Is protocol inheritance something we want in the language? Potentially, I'm not sure right now
+ *   - Is protocol inheritance (practically: 'with' flattening) something we want in the language? Potentially, I'm not sure right now
  *   - Strict aliasing is annoying, but useful for optimisations. I want to try and do something about that.
- *     - Also with regards to optimisation, perhaps 'for' loops should be more constrained to allow optimising on the iteration number without exploiting signed overflow
- *       - e.g. "for(int i = A; i <= B; i += 4)" may be infinite if integer overflow is defined, which is clearly problematic
- *       - In general, maybe the language constructs should be more constrained for this same purpose (we want to make things easy for the optimiser, somewhat unlike C)
+ *     - In general, we want to make the optimisers life easier
+ *       - This is why, for example, iterators are supported to allow optimising numeric loops w/o exploiting signed overflow
+ *         - e.g. "for(int i = A; i <= B; i += 4)" may be infinite if integer overflow is defined, which is clearly problematic
+ *       - In general, maybe the language constructs should be more constrained for this same purpose (we want to make things easy for the optimiser)
  *   - Function boundaries to pre-compiled code are going to be a bit of a pain, tooling infrastructure changes may be required for things to work smoothly
  *     - The fact that optimisation is so terrible over function boundaries in C is really bad, so we should try to fix that.
  *     - Part of this is that we want contexts (which may include allocator information, etc.) to be essentially 'free' in as many cases as possible
@@ -66,9 +70,18 @@ main :: (argc: Int32, argv: &UInt8[]) -> Int32 {
 	circle: Circle = ???
 	circle.pos.x = circle.pos.y = 42
 	circle.radius = 5
-	for i: Auto = 0, i < 100, ++i {
+	for i in 0..99 {
 		print_area(circle)
 		println("@{cast<Float32>(i)}")
+	}
+
+	// Iterators are supported for structures that implement the 'Enumerable'
+	// trait providing some number of function overloads to visit items in a
+	// collection.
+	// Note: general purpose efficient iterators are hard, so we'll probably allow
+	// some specialisation in these (see: nothings.org/computer/iterate.html).
+	for circle in someEnumerableObject {
+		print_area(circle)
 	}
 
 	if condition {
@@ -96,11 +109,6 @@ main :: (argc: Int32, argv: &UInt8[]) -> Int32 {
 
 	until condition {
 		println("!")
-	}
-
-	// Like in many languages, '_' is an anonymous variable / blank identifier.
-	for _, i < 100, ++i {
-		print_area(circle)
 	}
 
 	// You can 'bake' specialised versions of a function, such as with particular
@@ -190,7 +198,7 @@ main :: (argc: Int32, argv: &UInt8[]) -> Int32 {
 	match item {
 		case 1 => println("A"),
 		case 2 => println("B"),
-		case _ => println("C")
+		case _ => println("C") // Like in many languages, '_' is an anonymous variable / blank identifier.
 	}
 
 	// 'match' statements return a value, and so can be used in assignments.
@@ -337,12 +345,6 @@ std :: namespace {
 		result.x = 0
 		result.y = 0
 		return result
-	}
-
-	SomeEnum :: bitmask enum {
-		First,
-		Second,
-		Third
 	}
 
 	SomeUnion :: union {
