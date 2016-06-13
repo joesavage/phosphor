@@ -4,9 +4,13 @@
  * 
  * Additional notes and extra tidbits (in no particular order):
  *   - All syntax (and, indeed, semantics) in this file is hugely non-final!
+ *   - The idea of the language has evolved so much over time that a full conceptual re-imagining may be in order
+ *     - Focusing on optimisability amongst other things which were not considered enough during the initial design work, for example.
+ *     - This slow evolution may have also resulted in the idea of the language changing into a hotchpotch of things that looked cool at the time.
+ *       - If so, this clearly isn't a good thing, and so setting out from the beginning having established a clearer focus sounds sensible
  *   - Eventually, I want the compiler to have really great warnings and errors (see: Elm's amazing errors)
  *     - I would also like to make it really easy to offer similar behaviour to clang's sanitizers
- *   - Built-in types like 'Int' may abide to certain protocols (similar to Ord, Num, etc. in Haskell)
+ *   - Built-in types like 'Int' may abide to certain protocols (similar to Ord, Num, etc. in Haskell). This needs some more thought, however.
  *   - Non-type struct specialisation/variations may be supported, e.g. a struct which takes an array length parameter
  *     - We should also have some way to query 'struct parameters' in general
  *       - e.g. add_to_hashmap :: (table: $T<HashMap>, key: T.key_type, value: T.value_type)
@@ -34,7 +38,7 @@
  *     - In a similar light, it would be nice to have a better abstraction for SIMD than basic intrinsics
  *   - Is protocol inheritance (practically: 'with' flattening) something we want in the language? Potentially, I'm not sure right now
  *   - Strict aliasing is annoying, but useful for optimisations. I want to try and do something about that.
- *     - In general, we want to make the optimisers life easier
+ *     - In general, we want to make the optimisers life easier (in general, this is a huge goal of the language)
  *       - This is why, for example, iterators are supported to allow optimising numeric loops w/o exploiting signed overflow
  *         - e.g. "for(int i = A; i <= B; i += 4)" may be infinite if integer overflow is defined, which is clearly problematic
  *       - In general, maybe the language constructs should be more constrained for this same purpose (we want to make things easy for the optimiser)
